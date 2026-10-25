@@ -75,8 +75,8 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [Mekanism](https://modrinth.com/mod/mekanism) | 10.4.16.80 | 実装備のメカスーツの効果（Step Assist・重力変調・静水学的反発・スキューバ）が動く。コスメ枠に夢幻終焉を着けてもメカスーツの判定は消えない（`behavior.realPriorityNamespaces`） |
 | fantasy_ending（要 EndingLib） | 2.7.20 / 2.2.1fix | 夢幻終焉 4 点のセット効果（128 以下のダメージ無効化・シールド・死亡時復帰・効果無効）が動く。**実装備とコスメ枠の合算で判定**するので、実装備のセットがコスメに隠れない |
 | [Sophisticated Backpacks](https://modrinth.com/mod/sophisticated-backpacks) + Sophisticated Core | 3.26.14.2226 / 1.5.15.2427 | コスメ枠（胸）のバックパックが **B キーで開き、中身を出し入れでき、背中に描画される**。同じスロットに実装備のバックパックがあればそちらが優先（互換パッチ同梱） |
-| [Apotheosis](https://modrinth.com/mod/apotheosis) + Placebo + Apothic Attributes | 7.4.8 / 8.6.3 / 1.3.7 | コスメ枠の装備の**アフィックス属性**（最大体力・防御力・防具強度・呪文威力など）が実装備の上に加算される |
-| [Iron's Spellbooks](https://modrinth.com/mod/irons-spellbooks) | 3.16.3 | コスメ枠の装備の**アップグレードオーブ属性**（`irons_spellbooks:upgrade_data`）が加算される。装備に注入した呪文（`spell_container`）も `getItemBySlot` 経由で見える（呪文の発動自体は実機未検証） |
+| [Apotheosis](https://modrinth.com/mod/apotheosis) + Placebo + Apothic Attributes | 7.4.8 / 8.6.3 / 1.3.7 | コスメ枠の装備の**アフィックス属性**（最大体力・防御力・防具強度・呪文威力など）が実装備の上に加算される。ダメージ軽減系（`blockading` / `feathery` など）もコスメ枠で機能する（実機検証済み） |
+| [Iron's Spellbooks](https://modrinth.com/mod/irons-spellbooks) | 3.16.3 | コスメ枠の装備の**アップグレードオーブ属性**（`irons_spellbooks:upgrade_data`）が加算される。装備に注入した呪文（`spell_container`）も `getItemBySlot` 経由で見え、スペルホイールへの表示と発動（V キー）まで動く（実機検証済み。実装備優先のスロットでは実装備が優先されるためコスメの呪文は使えない） |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
 独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
@@ -526,6 +526,40 @@ fantasy_ending の装備判定（`ArmorUtils#getArmorSet`）は `getItemBySlot` 
 どちらも属性の元は Forge の `ItemAttributeModifierEvent` です。本 MOD の属性ミラーは
 `cosmetic.getAttributeModifiers(slot)` を呼ぶだけなので、このイベントに乗る MOD の動的な属性は
 そのまま拾えます（`ItemStack#getAttributeModifiers` が `ForgeHooks.getAttributeModifiers` を呼ぶため）。
+
+### 挙動系アフィックスと注入呪文の「発動」（実機、1.6.1）
+
+属性にならないアフィックスと、装備に注入した呪文が**実際に発動するか**まで確認しました。
+
+Apotheosis 7.4.8（rarity = `apotheosis:ancient`、`/apoth affix apply ... 1.0`）。ダメージはすべて同一条件（`/difficulty hard`、`naturalRegeneration false`、最大体力 200）での比較です。
+
+| アフィックス | 入れた先 | ダメージ源 | 実ダメージ |
+|---|---|---|---|
+| （無し・鉄のチェストプレート） | コスメ胸 | `/damage @p 100 minecraft:mob_attack` | 64.66 |
+| `apotheosis:armor/dmg_reduction/blockading` | コスメ胸 | `mob_attack 100` | **50.0**（-22.7%） |
+| （無し・鉄のブーツ） | コスメ足 | `/damage @p 40 minecraft:fall` | 30.0 |
+| `apotheosis:armor/dmg_reduction/feathery` | コスメ足 | `fall 40` | **18.0**（-40%） |
+| `apotheosis:armor/dmg_reduction/feathery` | **実装備**の足（回帰） | `fall 40` | **18.0**（コスメと同一） |
+
+挙動系アフィックスは `AdventureEvents#onDamage` が `entity.getAllSlots()`（= 手 + `getArmorSlots`）を回して適用します。本 MOD の `getArmorSlots` はコスメを `append` するので、属性にならない効果もコスメ枠から乗ります。
+
+Iron's Spellbooks 3.16.3（鉄のチェストプレートに `irons_spellbooks:spell_container` で `irons_spellbooks:heal` level 1 を注入）:
+
+| 構成 | R キー（ホイール） | V キー（発動） |
+|---|---|---|
+| コスメ胸のみ・両手空 | **Heal レベル1 / 回復量 5 / マナ 30 / クールダウン 15 秒** が出る | HP 140 → **145**、マナ 100 → **70** |
+| 呪文がどこにも無い（対照） | 空 | HP 150 → **150**（変化なし） |
+| 実装備=MekaSuit（`query=real`） | 出ない | HP 140 → **140**（発動しない） |
+| 実装備=ダイヤ胸当て（`query=cosmetic`） | 出る | HP 140 → **145**（発動） |
+
+![spell wheel from cosmetic armor](docs/img/isb-spell-wheel.png)
+
+注入呪文は `SpellSelectionManager` が `player.getItemBySlot(...)` で装備を読むため、コスメ枠の呪文もホイールに載り、サーバー側の詠唱も同じ経路で通ります。実装備優先（`behavior.realPriorityNamespaces`）のスロットでは `getItemBySlot` が実装備を返すので、そのスロットのコスメの呪文は使えません（意図どおり）。
+
+計測時の注意:
+
+- `/notcosmeticarmor cosmetic <slot> hand` は**メインハンドを空にしません**。そのまま測ると同じアイテムが手のスロットでも `getAllSlots()` に入り、アフィックスや呪文が二重に効きます（`blockading` を手に残したまま測ると 100 ダメージが 38.4、手を空にすると 50.0 でした）。
+- この検証環境では、全スロットが空でもダメージに一律 ×0.75 の軽減がかかります（原因は未特定）。上の表はすべて同一条件内の比較です。
 
 ## 謝辞
 

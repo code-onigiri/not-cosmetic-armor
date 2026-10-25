@@ -950,7 +950,97 @@ Forge の `patches/net/minecraft/world/item/ItemStack.java.patch` で、
 
 ### 残る制約
 
-- 属性にならない**挙動系アフィックス**（onHurt など）は未検証。属性イベントに乗らないものは
-  アイテムの tick / イベント側の話になるので、別途ソースを読む必要がある。
-- Iron's Spellbooks の**注入呪文の発動**は未検証。`SpellSelectionManager.java:53-58` が
-  `player.m_6844_(...)` で装備を読むため呪文の選択肢には出るが、詠唱して効果が出るかは実機で見ていない。
+- 属性にならない**挙動系アフィックス**（onHurt など）と Iron's Spellbooks の**注入呪文の発動**は
+  この時点では未検証だった → §22 で実機確認済み（どちらも追加パッチ無しで動く）。
+
+---
+
+## §22 挙動系アフィックスと注入呪文は元から動いていた（1.6.1）
+
+### 現象 / 出発点
+
+1.6.0 の時点で残っていた疑問は 2 つ（m06429「お願いします」で着手）。
+
+1. Apotheosis の**挙動系アフィックス**（属性ではなくダメージ計算に直接介入するもの）がコスメ枠で効くか。
+2. Iron's Spellbooks の**注入呪文**が「選択肢に出る」だけでなく「発動する」か。
+
+### ソース読解（実機の前・AGENTS.md R1）
+
+- Apotheosis: `/tmp/apo/dev/shadowsoffire/apotheosis/adventure/AdventureEvents.java` の
+  `onDamage(LivingHurtEvent)` が `for (ItemStack s : ent.m_20158_())` を回し、
+  `SocketHelper.getGems(s).onHurt(...)` と `AffixHelper.getAffixes(s)` の
+  `AffixInstance#onHurt(...)` を適用する。
+  `m_20158_` = `Entity#getAllSlots()` は
+  `/tmp/cae/mcsrc/net/minecraft/world/entity/Entity.java:2080-2082` で
+  `Iterables.concat(this.m_6167_(), this.m_6168_())`（手 + `getArmorSlots`）。
+  → 本 MOD の `getArmorSlots` はコスメを **append** しているので、コスメのアフィックスもこのループに入る。
+- Iron's Spellbooks: サーバーの詠唱は `/tmp/isb/io/redspace/ironsspellbooks/api/util/Utils.java:351` の `serverSideInitiateCast` が `new SpellSelectionManager(serverPlayer)` を作り、
+  `SpellSelectionManager#init(Player)`（`:53-58`）が `player.m_6844_(HEAD/CHEST/LEGS/FEET/MAINHAND/OFFHAND)` を回す。
+  つまり選択も発動も `getItemBySlot` 経由。
+
+どちらも追加パッチ不要の見込みが立ち、実機で確かめる 1 回の起動に 4 問を載せた（R2）。
+
+### 実測（1 起動、4 問）
+
+環境: `/difficulty hard`、`/gamerule naturalRegeneration false`、`/effect clear @p`、最大体力 200、`/fill 100 200 100 103 200 103 minecraft:stone` の上に `/tp @p 101.5 201 101.5`。
+実装備 4 スロットは air、コスメ 4 スロットは none から開始。
+
+**この環境のダメージモデル（先に測るべきだった）**: 全スロット空（armor=0）でも
+**すべてのダメージに一律 ×0.75** がかかる（`mob_attack 100` → 75、`fall 40` → 30、`magic 40` → 30）。
+逆に `explosion 40` は 45（×1.125）。原因は未特定（`fantasyEnding: set=none is4=false shield[level=0 dr=128.0]` なので
+ルニックシールドではない）。**絶対値ではなく同一条件の比較でしか語れない**。
+
+#### Q1: blockading（PHYSICAL 軽減）をコスメ胸に
+
+付与は `/apoth set_rarity apotheosis:ancient` → `/apoth affix apply apotheosis:armor/dmg_reduction/blockading 1.0`。
+**アフィックス id はサブパス込み**で、`apotheosis:blockading` では `Unknown affix` になる。
+
+| 構成 | `mob_attack 100` | `fall 40` |
+|---|---|---|
+| コスメ胸 = 素の鉄チェスト（armor 6） | 64.66 | — |
+| コスメ胸 = 鉄チェスト + blockading ancient 1.0 | **50.0**（-22.7%） | **24.0**（-20%） |
+
+#### Q2: feathery（FALL 軽減）をコスメ足に
+
+| 構成 | `fall 40` |
+|---|---|
+| コスメ足 = 素の鉄ブーツ | 30.0 |
+| コスメ足 = 鉄ブーツ + feathery ancient 1.0 | **18.0**（-40%） |
+| **実装備**の足 = 同じブーツ（回帰） | **18.0**（コスメと完全一致） |
+
+→ 挙動系アフィックスはコスメ枠で機能する。追加パッチ不要。
+
+#### Q3: 注入呪文（heal）をコスメ胸に
+
+装備の作り方は §21 の「NBT 付き装備の投入手順」のとおり（`Inventory[{Slot:0b}]` に `spell_container` を書く）。
+
+| 構成 | R キー（ホイール） | V キー（発動） |
+|---|---|---|
+| コスメ胸のみ・両手空 | Heal レベル1 / 回復量 5 / マナ 30 / CD 15 秒 | HP 140 → **145**、マナ 100 → **70** |
+| 呪文がどこにも無い（対照） | 空 | HP 150 → **150** |
+| 実装備=MekaSuit（`query=real`） | 出ない | HP 140 → **140** |
+| 実装備=ダイヤ胸当て（`query=cosmetic`） | 出る | HP 140 → **145** |
+
+→ 注入呪文は「選択肢に出る」だけでなく**発動する**。ただし実装備優先（1.5.0 の `RealPriority`）の
+スロットでは `getItemBySlot` が実装備を返すため、コスメの呪文は見えない（これは意図どおり）。
+
+### 罠（この回で踏んだもの）
+
+1. **メインハンドに残したまま測ると二重に効く。** `/notcosmeticarmor cosmetic chest hand` は
+   メインハンドのスタックを**コピーするだけで消さない**。同じアイテムが手のスロットにも残るので、
+   `getAllSlots()` には手ぶんとコスメぶんの 2 個が入る。実測: blockading を手に残したまま
+   `mob_attack 100` → **38.4**、手を `weapon.mainhand` = air にして → **50.0**。
+   最初の 1 回はこれで「RealPriority でもコスメの呪文が発動した」と誤認した（手のアイテムが撃っていた）。
+   コスメ枠の呪文・アフィックスを測るときは**両手を空にする**。
+2. **`/data modify entity @p Health set value 200.0f` はタグが付くと失敗する。**
+   2 回目以降は「指定されたプロパティは既にタグを持っていたため、変更されませんでした」が出る。
+   以降は `/data merge entity @p {Health:140.0f}` を使う。
+3. `/apoth affix apply` は**メインハンドのアイテム**が対象。コスメ枠に入れたあとでは付与できない。
+4. スペルホイールは R を**押しっぱなし**にしないと閉じる（`xdotool keydown r` → スクショ → `keyup r`）。
+   描画時に `GL ERROR 65539: Invalid key 2` が出るが既知のノイズ。
+
+### 残る制約
+
+- この検証環境の ×0.75 の正体は未特定。ダメージ量を語るときは必ず同一条件の差分で語る。
+- `mustEquip` / クールダウン短縮系のアップグレード（マナ・クールダウンオーブ）と、
+  呪文の**詠唱時間**がコスメ枠で正しく進むかは未検証（継続詠唱の呪文で確かめる必要がある）。

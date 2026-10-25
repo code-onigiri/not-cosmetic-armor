@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.1 — 2026-10-26
+
+挙動の変更はありません（検証とドキュメントのみ）。属性にならない Apotheosis のアフィックスと、
+Iron's Spellbooks の注入呪文の**発動**を実機で確認し、どちらも追加パッチ無しで動くことを確定しました。
+
+### 検証済み（実機、1.6.1）
+
+| 構成 | 結果 |
+|---|---|
+| Apotheosis `armor/dmg_reduction/blockading`（ancient 1.0）をコスメ胸 | `mob_attack 100` が 64.66 → **50.0**（-22.7%）、`fall 40` が 30.0 → **24.0** |
+| Apotheosis `armor/dmg_reduction/feathery`（ancient 1.0）をコスメ足 | `fall 40` が 30.0 → **18.0**（-40%）。同じブーツを実装備に入れても **18.0** で同一 |
+| ISB `spell_container`（heal level 1）をコスメ胸 | ホイール（R）に Heal が出る。V キーで HP 140 → **145**、マナ 100 → **70** |
+| 同・実装備=MekaSuit（`query=real`） | ホイールに出ず、V でも発動しない（`getItemBySlot` が実装備を返すため。意図どおり） |
+| 同・実装備=ダイヤ胸当て（`query=cosmetic`） | 発動する（HP 140 → 145） |
+
+経路: 挙動系アフィックスは `AdventureEvents#onDamage` が `entity.getAllSlots()`（手 + `getArmorSlots`）を回して適用、注入呪文は `SpellSelectionManager` が `player.getItemBySlot(...)` で装備を読むため、どちらも本 MOD の上書き経路に乗ります。
+
+### ドキュメント
+
+- README の互換表（Apotheosis / Iron's Spellbooks）を「実機検証済み」に更新し、検証ログの節を追加。
+- `docs/plan-review.md` に §22 を追加（検証手順、二重適用の罠、実装備優先との相互作用）。
+- AGENTS.md のやらかし集に、メインハンドに残したまま測る二重適用と `/data modify ... Health set value` の落とし穴を追加。
+
 ## 1.6.0 — 2026-10-26
 
 ### 修正

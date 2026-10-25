@@ -138,6 +138,9 @@ MOD が装備を判定する経路は 1 つではない。コスメ機能を入�
 | `/data modify entity @p SelectedItem.tag...` で手に持った装備の NBT を書いた | 「変更しました」と出るのに反映されない（`SelectedItem` は読み取り専用） | `Inventory[{Slot:0b}]`（ホットバー 1）に対して書く |
 | `/item replace ... with <id>{NBT}` で複雑な NBT を渡した | チャットに「「}」が必要です」。パースに失敗する | 素のアイテムを入れてから `/data modify` で NBT を足す |
 | `RealPriority` で query の意味を変えたのに、それを読む互換パッチを数えなかった | `ArmorSetUnion` が 3 層前提で、実装備メカスーツが勝った瞬間にコスメの夢幻終焉がどの層にも出ずセットが消えた | 層を増やす/意味を変えるときは、その query の読み手を全部 grep する |
+| `cosmetic <slot> hand` のあとメインハンドを空にせず計測した | 同じアイテムが手のスロットにも残り、`getAllSlots()` に 2 個入ってアフィックス/呪文が二重に効く（`mob_attack 100` が 38.4、手を空にすると 50.0） | コスメ枠の効果を測る前に `/item replace entity @p weapon.mainhand with minecraft:air` |
+| `/data modify entity @p Health set value ...` を 2 回目以降も使った | 「指定されたプロパティは既にタグを持っていたため、変更されませんでした」で HP が変わらず、前の値のまま計測してしまう | `/data merge entity @p {Health:140.0f}` を使う |
+| 全スロット空のダメージを「素の値」だと思った | この検証環境は全ダメージに一律 ×0.75 がかかる（`explosion` は ×1.125）。絶対値を前回と比べると誤読する | 同一条件の差分だけで語る。まず素の値を測って係数を確認する |
 
 ## 検証ハーネス
 
