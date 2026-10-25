@@ -41,6 +41,9 @@ public final class CosmeticState {
     /** Real armor stacks parked while the tick window is open. */
     public final ItemStack[] windowReal = new ItemStack[CosmeticSlots.COUNT];
 
+    /** True while {@code Player#hurtArmor} temporarily restored the real armor out of the window. */
+    public boolean reopenWindow;
+
     /** Debug switch for the {@code /notcosmeticarmor probe} command. */
     public boolean probe;
 

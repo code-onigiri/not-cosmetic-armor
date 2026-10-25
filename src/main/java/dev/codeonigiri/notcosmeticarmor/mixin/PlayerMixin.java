@@ -1,10 +1,13 @@
 package dev.codeonigiri.notcosmeticarmor.mixin;
 
 import dev.codeonigiri.notcosmeticarmor.config.CnaConfig;
+import dev.codeonigiri.notcosmeticarmor.core.CosmeticDurability;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticTick;
+import dev.codeonigiri.notcosmeticarmor.core.TickWindow;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -43,6 +46,36 @@ public abstract class PlayerMixin {
         ItemStack cosmetic = CosmeticStacks.get(player, slot.getIndex());
         if (!cosmetic.isEmpty()) {
             cir.setReturnValue(cosmetic);
+        }
+    }
+
+    /**
+     * Real armor has to be in place while vanilla applies durability damage, otherwise the tick
+     * window would hand {@code Inventory#hurtArmor} the temporary cosmetic copies and the damage
+     * would be thrown away. The window is restored as soon as {@code hurtArmor} returns.
+     */
+    @Inject(method = "hurtArmor", at = @At("HEAD"))
+    private void notcosmeticarmor$hurtArmorStart(DamageSource source, float amount, CallbackInfo ci) {
+        if (!((Object) this instanceof ServerPlayer player)) {
+            return;
+        }
+        CosmeticState state = CosmeticState.peek(player);
+        if (state != null && state.windowHeld) {
+            TickWindow.close(player, state);
+            state.reopenWindow = true;
+        }
+        CosmeticDurability.hurtArmor(player, source, amount);
+    }
+
+    @Inject(method = "hurtArmor", at = @At("RETURN"))
+    private void notcosmeticarmor$hurtArmorEnd(DamageSource source, float amount, CallbackInfo ci) {
+        if (!((Object) this instanceof ServerPlayer player)) {
+            return;
+        }
+        CosmeticState state = CosmeticState.peek(player);
+        if (state != null && state.reopenWindow) {
+            state.reopenWindow = false;
+            TickWindow.open(player, state);
         }
     }
 

@@ -24,10 +24,10 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 - **エンチャント**: `getItemBySlot` を上書きしてコスメ装備を「着ている防具」として返すため、バニラのダメージ計算（Protection など）や他 MOD の参照にもコスメ防具が見えます。
 - **tick 内の参照（インタリーブ）**: 奇数ゲーム tick の `Player#tick` の間だけ、コスメ装備を実装備枠に**コピー**して入れ、tick の終わりに元へ戻します。鞘翅の滑翔判定、カメの甲羅の水中呼吸、MOD の「この装備を着ているか」判定など、tick の内側で `getItemBySlot` を読む処理にもコスメ装備が見えます。クライアントには何も送られず、実装備は一切失われません。
 - **item tick**: コスメ枠のアイテムにも `inventoryTick` / Forge の `onArmorTick` が走ります。エネルギーやチャージを持つ MOD 防具（TiC など）の動作に必要です。
+- **耐久**: 実装備が耐久ダメージを受けたとき、同じスロットのコスメ装備にも**同じ量**のダメージが入ります（4 分の 1 丸め・最低 1 のバニラ規則、Unbreaking、壊れたら消える挙動まで同じ）。`/notcosmeticarmor status` の `dmg=` で両方の耐久値を確認できます。
 
 ## 何が機能しないか（意図的）
 
-- **耐久値**: ダメージは実装備（本物の防具）にのみ入ります。コスメ装備は減りません。見た目だけの装備に耐久の概念を持ち込むと、修理・破壊・複製の扱いが破綻するためです。
 - **描画**: 見た目の差し替えは従来どおり CAR が担当します。本 MOD は描画コードに触りません（[描画（L4）](#描画l4)）。
 - **実装備の tick**: コスメの下に隠れている実装備も、これまで通り tick されます（バニラの挙動を変えない方針）。
 
@@ -42,6 +42,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | `behavior.overrideQueries` | true | `getItemBySlot` でコスメ防具を返す（エンチャント有効化） |
 | `behavior.interleave` | true | 奇数 tick の間だけコスメ装備を実装備枠にコピーする（tick 内参照の有効化） |
 | `behavior.tickCosmeticItems` | true | コスメ枠のアイテムを tick する |
+| `behavior.cosmeticDurability` | true | 実装備が受けた耐久ダメージをコスメ装備にも同じ量だけ入れる |
 | `behavior.ignoreSkinArmorFlag` | true | CAR の「skin armor」フラグが立ったスロットも機能させる |
 
 ## コマンド
@@ -108,7 +109,11 @@ implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
    `Inventory#armor` に入れて実装備を退避する。窓の中ではバニラの装備差分処理自体を
    `detectEquipmentUpdates` の HEAD でキャンセルするので、属性の二重計上もパケット送信も起きない。
    窓は tick の終わり（例外時は次 tick の頭）に必ず閉じ、実装備を書き戻す。
-   コピーを入れているので、窓の中で付いた耐久値は捨てられ、CAR が持つスタックは変化しない。
+   コピーを入れているので、`Inventory#armor` を直接書き換える他 MOD は窓の中ではコピーを見る。
+5. **耐久ミラー** — 実装備が耐久ダメージを受ける経路（`Player#hurtArmor`）に注入し、同じ量を
+   コスメ装備にも与えて CAR に書き戻す。窓が開いている間は一旦閉じて実装備を戻してから
+   バニラに処理させるので、実装備の耐久値が捨てられることはない。コスメが壊れたらスロットは空になり、
+   属性もその場で消える（防御力 13 → 8 に戻る）。
 
 モードは設定の組み合わせで決まります: `enabled=false` が OFF、`mirrorAttributes` のみで ATTRIBUTE、
 `+overrideQueries` で PRIORITY、`+interleave` で INTERLEAVE（既定）。
@@ -149,6 +154,20 @@ CAR は `RenderPlayerEvent.Pre` でクライアントの `Inventory#armor` を�
 ![third person](docs/img/third-person.png)
 
 armor は 8 + 5 = 13、窓の内外で `getItemBySlot` が入れ替わり、防御力は 13 のまま（二重計上なし）。
+
+耐久のミラー（実装備ダイヤ 528 / コスメ金 112）:
+
+![durability mirror](docs/img/durability-mirror.png)
+
+| 与えたダメージ | 実装備 | コスメ |
+|---|---|---|
+| `/damage @p 5 minecraft:mob_attack` | 1/528 | 1/112 |
+| 炎の上に 3 秒（`in_fire` 1.0 × 8） | 18/528 | 18/112 |
+| 同上のあと 1 回 mob_attack（コスメは 111 から） | 19/528 | 破壊されてスロットが空、防御力 13 → 8 |
+
+`/damage @p 5`（既定の `minecraft:generic`）では耐久は減りません。これはバニラの仕様で、
+`bypasses_armor` タグの付いたダメージは防具の耐久を削らないためです。耐久のテストには
+`minecraft:mob_attack` か炎を使ってください。
 
 ## ライセンス
 

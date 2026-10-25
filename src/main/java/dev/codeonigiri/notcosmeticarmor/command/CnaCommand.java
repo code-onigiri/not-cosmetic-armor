@@ -38,6 +38,7 @@ public final class CnaCommand {
                 .append(" overrideQueries=").append(CnaConfig.overrideQueries())
                 .append(" interleave=").append(CnaConfig.interleave())
                 .append(" tickCosmeticItems=").append(CnaConfig.tickCosmeticItems())
+                .append(" cosmeticDurability=").append(CnaConfig.cosmeticDurability())
                 .append('\n');
 
         ServerPlayer player = source.getPlayer();
@@ -96,6 +97,13 @@ public final class CnaCommand {
     }
 
     private static String name(ItemStack stack) {
-        return stack.isEmpty() ? "-" : stack.getHoverName().getString() + " x" + stack.getCount();
+        if (stack.isEmpty()) {
+            return "-";
+        }
+        String base = stack.getHoverName().getString() + " x" + stack.getCount();
+        if (stack.isDamageableItem()) {
+            base += " dmg=" + stack.getDamageValue() + "/" + stack.getMaxDamage();
+        }
+        return base;
     }
 }

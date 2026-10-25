@@ -11,6 +11,7 @@ public final class CnaConfig {
     public static final ForgeConfigSpec.BooleanValue OVERRIDE_QUERIES;
     public static final ForgeConfigSpec.BooleanValue INTERLEAVE;
     public static final ForgeConfigSpec.BooleanValue TICK_COSMETIC_ITEMS;
+    public static final ForgeConfigSpec.BooleanValue COSMETIC_DURABILITY;
     public static final ForgeConfigSpec.BooleanValue IGNORE_SKIN_FLAG;
 
     static {
@@ -31,12 +32,17 @@ public final class CnaConfig {
                 "  sees the cosmetic armor. Nothing is sent to the client and the real armor is restored",
                 "  before the tick ends. Needs mirrorAttributes for the armor value itself.",
                 "tickCosmeticItems: tick cosmetic stacks like worn armor (Forge onArmorTick / inventoryTick).",
+                "cosmeticDurability: let the cosmetic armor wear out like worn armor. Every hit that damages the",
+                "  real armor also damages the cosmetic armor of the same slot (same amount, same unbreaking and",
+                "  breaking rules), and the change is written back to Cosmetic Armor Reworked. Only meaningful",
+                "  with mirrorAttributes, because that is what makes the cosmetic armor act as worn armor.",
                 "ignoreSkinFlag: also mirror slots that Cosmetic Armor Reworked marks as 'skin armor'."
         ).push("behavior");
         MIRROR_ATTRIBUTES = builder.define("mirrorAttributes", true);
         OVERRIDE_QUERIES = builder.define("overrideQueries", true);
         INTERLEAVE = builder.define("interleave", true);
         TICK_COSMETIC_ITEMS = builder.define("tickCosmeticItems", true);
+        COSMETIC_DURABILITY = builder.define("cosmeticDurability", true);
         IGNORE_SKIN_FLAG = builder.define("ignoreSkinArmorFlag", true);
         builder.pop();
 
@@ -64,6 +70,10 @@ public final class CnaConfig {
 
     public static boolean tickCosmeticItems() {
         return !SPEC.isLoaded() || TICK_COSMETIC_ITEMS.get();
+    }
+
+    public static boolean cosmeticDurability() {
+        return !SPEC.isLoaded() || COSMETIC_DURABILITY.get();
     }
 
     public static boolean ignoreSkinFlag() {

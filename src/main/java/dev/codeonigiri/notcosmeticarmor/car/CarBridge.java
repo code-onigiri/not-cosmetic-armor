@@ -34,6 +34,7 @@ public final class CarBridge {
     private static Method getCAStacks;
     private static Method getStackInSlot;
     private static Method isSkinArmor;
+    private static Method setStackInSlot;
 
     private CarBridge() {
     }
@@ -79,6 +80,11 @@ public final class CarBridge {
             } catch (NoSuchMethodException ignored) {
                 isSkinArmor = null;
             }
+            try {
+                setStackInSlot = base.getMethod("setStackInSlot", int.class, ItemStack.class);
+            } catch (NoSuchMethodException ignored) {
+                setStackInSlot = null;
+            }
         } catch (Throwable t) {
             getCAStacks = null;
             getStackInSlot = null;
@@ -106,6 +112,30 @@ public final class CarBridge {
             return stack instanceof ItemStack itemStack ? itemStack : ItemStack.EMPTY;
         } catch (Throwable t) {
             return ItemStack.EMPTY;
+        }
+    }
+
+    /**
+     * Writes {@code stack} back to CAR's inventory. Going through the inventory (an
+     * {@code ItemStackHandler}) instead of mutating the stack in place is what makes CAR sync the
+     * change to the client and save it with the player data.
+     *
+     * @return true when the write reached CAR.
+     */
+    public static boolean set(UUID playerId, int slot, ItemStack stack) {
+        init();
+        if (getCAStacks == null || setStackInSlot == null) {
+            return false;
+        }
+        try {
+            Object stacks = getCAStacks.invoke(null, playerId);
+            if (stacks == null) {
+                return false;
+            }
+            setStackInSlot.invoke(stacks, slot, stack);
+            return true;
+        } catch (Throwable t) {
+            return false;
         }
     }
 

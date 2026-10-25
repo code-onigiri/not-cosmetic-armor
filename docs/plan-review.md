@@ -262,3 +262,44 @@ plan.md:225-226 の分岐でいう「自前インベントリ参照」に該当�
 - 描画は完全に CAR 依存。CAR を外すとコスメは見えなくなる（属性だけ残る）。
 - CAR 側が `Disabled` を立てた場合（GUI 内など）は実装備の見た目になる。これは CAR の仕様。
 - 他プレイヤーからの見え方も CAR の同期に依存する（同じ描画経路なので本 MOD の影響はない）。
+
+## 11. 追記（耐久のミラーを実装した）
+
+plan.md の「何が機能しないか」には耐久値が入っていなかったが、実装後の要望でコスメ装備も
+実装備と同じように傷むようにした。設計上の判断だけ残しておく。
+
+### 経路
+
+バニラの耐久ダメージは `Player#hurtArmor(DamageSource, float)`（srg `m_6472_`）から
+`Inventory#hurtArmor(source, amount, Inventory.ARMOR_SLOTS)`（`m_150072_`）に入り、
+スロットごとに `stack.hurtAndBreak((int)max(amount / 4, 1), player, ...)` が呼ばれる。
+ここが唯一の入口なので、`Player#hurtArmor` の HEAD に注入して**同じ計算**をコスメ側にもう一度
+回し、結果を CAR の `ItemStackHandler#setStackInSlot` に書き戻している
+（`core/CosmeticDurability.java`）。
+
+### 窓との干渉（ここが実装上の要点）
+
+tick 窓（L2）が開いている間は `Inventory#armor` にコスメのコピーが入っている。そのまま
+`hurtArmor` を走らせるとバニラはコピーを傷つけ、コピーは捨てられるので**実装備の耐久が
+消える**。そこで `hurtArmor` の HEAD で窓を閉じて実装備を戻し、RETURN で開き直す
+（`CosmeticState#reopenWindow`）。実測でも、炎上中の `in_fire` はすべて `window=true` で
+入ってきており、閉じ直しが効いていること、実装備とコスメが同じ値で減ることを確認した。
+
+### 実測（Forge 47.4.28 / CAR 1.20.1-v1a）
+
+| ダメージ | 実装備（ダイヤ 528） | コスメ（金 112） |
+|---|---|---|
+| `mob_attack` 5 | 1 | 1 |
+| `in_fire` 1.0 × 8 | 9 → 18 | 9 → 18 |
+| さらに `mob_attack` 5（コスメ 111 から） | 19 | 破壊 → スロット空、防御力 13 → 8 |
+
+`/damage` の既定は `minecraft:generic` で、これは `bypasses_armor` タグに入っているため
+防具の耐久を削らない（バニラ仕様）。テストには `minecraft:mob_attack` か炎を使う必要がある。
+
+### 残る制約
+
+- 耐久ダメージの入口（`Player#hurtArmor`）に乗っているので、実装備が空のスロットでも
+  コスメは傷む（`LivingEntity#getDamageAfterArmorAbsorb` は防具の有無に関係なく `hurtArmor` を呼ぶ）。
+- Unbreaking の抽選はコスメ側でも独立に走るので、実装備とコスメで減少量がずれることがある
+  （バニラの規則どおり）。
+
