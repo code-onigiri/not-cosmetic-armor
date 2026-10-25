@@ -213,3 +213,52 @@ probe(inside window): chest seen=1 golden_chestplate storedReal=1 diamond_chestp
   直接触る他 MOD が、窓が開いている奇数 tick に限りコスメのコピーを見る可能性がある。
 - 装備差分のスナップショット（`f_20947_`）は窓の間更新されないため、窓の外で実装備を
   付け替えた場合は次の tick で正しく差分が取られる（検証済み）。
+
+---
+
+## 10. 追記（L4: 描画は CAR に任せて干渉しない — 検証済み）
+
+plan.md:22 は L4 を「コスメ枠の描画（CAR の責務。干渉しない）」、plan.md:138 は M11
+（`HumanoidArmorLayer#renderArmorPiece` を止めて二重描画を防ぐ）を「描画は窓外なので基本不要」と
+している。実装後に M11 の要否を判断できる材料が揃ったので、結論を書く。
+
+### CAR の描画経路（実物を読んだ結果）
+
+`lain/mods/cos/impl/client/PlayerRenderHandler.java`:
+
+- `RenderPlayerEvent.Pre`（HIGHEST）で `player.getInventory().armor` の内容を退避し、
+  `ModObjects.invMan.getCosArmorInventoryClient(uuid)`（CAR 自身の `InventoryCosArmor`）から
+  スロットごとのコスメを `armor.set(i, stack)` で差し込む。`Post`（LOWEST）と
+  レンダリングキャンセル時に元へ戻す。
+- 同じ処理を `RenderHandEvent` / `RenderArmEvent` にも持つ。
+- **`getItemBySlot` は一度も呼ばない。**
+
+plan.md:225-226 の分岐でいう「自前インベントリ参照」に該当する。したがって:
+
+- L3（クエリ上書き）とは経路が重ならないので、二重描画は起きない。
+- 本 MOD の mixin はクライアントでは動かない（`PlayerMixin#getItemBySlot` は `isClientSide()`
+  で早期 return、`LivingEntityMixin#detectEquipmentUpdates` は `ServerPlayer` 以外で return）。
+- **M11 は実装しない**（入れても止める対象がない）。
+
+### 実機での確認（1280x720、同一視点で連続キャプチャ）
+
+実装装備ダイヤ胸当て・コスメ金胸当ての状態で、`/tp @p ~ ~ ~ 0 0` により視点を固定して撮影:
+
+| 対象 | 比較 | 結果 |
+|---|---|---|
+| HUD の防具バー | 12 フレーム（約 2 秒）のピクセル比較 | 全て一致（差分 0 ピクセル） |
+| インベントリの防具スロット | 8 フレーム | 全て一致（ダイヤのまま） |
+| 三人称モデル | 10 フレームの金/ダイヤ色ピクセル数 | 金 276〜305・ダイヤ 3〜11（揺らぎは待機モーションのみ） |
+
+防具バーが動かない＝ `GenericArmor` の同期値が 13 で安定（8 と 13 の間でチカチカしない）。
+防具スロットがダイヤのまま＝ tick 窓のコピーが `ClientboundSetEquipmentPacket` で
+クライアントに漏れていない。モデルが常に金＝ CAR の差し替えが 1 回だけ効いている
+（実装備と二重に描かれていない）。
+
+![presentation layers](img/presentation-layers.png)
+
+### 残る制約（L4）
+
+- 描画は完全に CAR 依存。CAR を外すとコスメは見えなくなる（属性だけ残る）。
+- CAR 側が `Disabled` を立てた場合（GUI 内など）は実装備の見た目になる。これは CAR の仕様。
+- 他プレイヤーからの見え方も CAR の同期に依存する（同じ描画経路なので本 MOD の影響はない）。
