@@ -72,11 +72,17 @@ nix develop
 Nix を使わない場合は JDK 17 を用意して `./gradlew build` を実行してください
 （Gradle 8.8 は wrapper が取得します）。
 
-開発用クライアントは `run/mods/` に CAR の jar を置いてから:
+開発用クライアント:
 
 ```sh
 ./gradlew runClient
 ```
+
+`run/mods/` には CAR の jar を置かないでください。CAR の配布 jar は SRG 名でコンパイルされた
+本番用で、開発ランタイム（official 名）では `Component.m_237113_` が見つからず、
+起動時に `NoSuchMethodError` で落ちます。CAR と一緒に動かす確認は、通常の Forge クライアント
+（`mods/` に jar を置く本番環境）で行ってください。CAR が無い開発環境でも、この MOD は
+「CAR が見つからない」とログに出して待機するだけで、起動はできます。
 
 ## 仕組み
 
