@@ -737,3 +737,85 @@ union の 2 層（`getItemBySlot` と `Inventory#armor`）が両方コスメに�
 - `ArmorUtils#getArmorSet` のシグネチャが変わったら追従が要る（`/notcosmeticarmor status` の
   `is4` が false になったことで気づける）。
 
+
+## 19. 「実装備が勝つスロット」を作った（1.5.0）
+
+### 現象
+
+ユーザー報告（m05465、原文）: "しかし、不具合はまだありますね、例えばメインにmeksuit(重力変調入り)、サブに無限終焉としたら無限終焉のUIは効きますが、mekは消えます、mekの効果も効いている気がしません例えば静水学的反発ユニット入れても実質的な水中効果は感じられませんし。"
+
+実装備 = メカスーツ、コスメ = 夢幻終焉 4 点の構成。1.4.0 の時点では
+`fantasyEnding: is4=true`（コスメ）、メカスーツ側は Step Assist も重力変調も出ていなかった。
+
+### 原因: Mekanism の装着判定は全部 `getItemBySlot`
+
+/tmp/mek に Mekanism 10.4.16.80 を vineflower で展開して確認した経路:
+
+- `CommonPlayerTickHandler.java:61` `isScubaMaskOn`（HEAD）
+- `CommonPlayerTickHandler.java:75` `getStepBoost`（FEET → `HYDRAULIC_PROPULSION_UNIT`、エネルギー不要）
+- `CommonPlayerTickHandler.java:91` `getSwimBoost`（LEGS → `HYDROSTATIC_REPULSOR_UNIT`）
+- `CommonPlayerTickHandler.java:176-183` `isGravitationalModulationReady`（CHEST → `GRAVITATIONAL_MODULATING_UNIT` + 電力）
+- `PlayerState.java:207-` `updateFlightInfo` が毎 tick `mayfly` を切り替え
+
+どれも `player.m_6844_(slot)`。1.4.0 までの L3 は常にコスメを返すので、実装備の
+メカスーツは Mekanism から見えない。ダメージ吸収（`ItemMekaSuitArmor.java:492`）だけは
+`m_6168_`（getArmorSlots、合算）なので効いていた、というのが「一部だけ効く」の正体。
+
+### 設計判断: グローバル反転でも ThreadLocal でもなく、名前空間単位
+
+- 案 A（同じスロットは常に実装備が勝つ）: 既存の検証済み挙動を壊す。AdvancedAE の水中呼吸や
+  ManaitaMTK の無敵は「コスメが実装備に勝つ」ことで成立している。
+- 案 C（Mekanism の判定を ThreadLocal で囲む）: 読み取り箇所が 5 メソッド以上あり、
+  バージョンが上がるたびに追従が要る。
+- 案 B（**名前空間で限定**、既定 `["mekanism"]`）を採用。`RealPriority.prefersReal(real, cosmetic)` は
+  「real が非空 && real が対象名前空間 && (cosmetic が空 || cosmetic が対象外)」のときだけ true。
+  同じ MOD の装備同士なら実装備が勝ち、対象外の MOD は従来どおりコスメが勝つ。
+
+### 修正
+
+- `core/RealPriority.java`（新規）: 上記の判定。`CnaConfig#realPriorityNamespaces()` を読む。
+- `mixin/PlayerMixin.java` の `getItemBySlot`: 実装備を読んで `prefersReal` なら
+  上書きしない（`Inventory#armor.get(slot.getIndex())`）。
+- `core/TickWindow#open`: 対象スロットは物理的に退避しない。退避すると奇数 tick だけ
+  メカスーツが `Inventory#armor` から消え、重力変調が半 tick おきに切れる。
+- `compat/endinglib/ArmorSetUnion`: 第 4 層として**コスメ枠そのもの**（`CosmeticStacks.get`）を追加。
+  これが無いと、実装備優先で見える層がメカスーツになった瞬間にコスメの夢幻終焉が
+  どの層にも現れず、セットが消える（実測: `set=MekaSuitMaterial is4=false shield[level=0]`）。
+
+### 検証（実機）
+
+実装備 = メカスーツ 4 点（足 `hydraulic_propulsion_unit` 1、脚 `hydrostatic_repulsor_unit` 4、
+胸 `gravitational_modulating_unit` 1 + `EnergyContainers` 16,000,000 J）、コスメ = 夢幻終焉 4 点。
+
+| 見た項目 | 1.4.0 | 1.5.0 |
+|---|---|---|
+| `forge:step_height_addition` | 0.6 | 1.1（+ Step Assist LOW 0.5） |
+| `abilities.mayfly` | 0b | 1b（重力変調） |
+| ダブルタップ → 上昇 | — | `flying=1b`、Y 201.6 → 216.6 / 2 秒 |
+| `forge:swim_speed`（水中） | 1.0 | 2.0（上昇 5.7 → 6.8 ブロック / 2 秒） |
+| 夢幻終焉 | `is4=false shield[level=0]` | `is4=true shield[level=4936]` + HUD バー |
+| status の `query=` | 4 スロット `cosmetic` | 4 スロット `real` |
+
+回帰: 実装備=空 / コスメ=夢幻終焉 4 点 → `query=cosmetic`、`is4=true`、`mayfly=1b`、
+飛行 Y 230.7 → 245.7 / 2 秒。実装備=ダイヤ胸当て / コスメ=夢幻終焉 → そのスロットは `query=cosmetic`。
+
+### 罠
+
+- **プレイヤーに `ArmorItems` は無い**。防具の NBT は `Inventory[{Slot:100b}]`（足）/ 101（脚）/
+  102（胸）/ 103（頭）。`/data modify entity @p ArmorItems[0] ...` は
+  「一致する要素がありません」で失敗する。
+- メカスーツのモジュールは `tag.mekData.modules`（`{"mekanism:gravitational_modulating_unit":{"amount":1}}`）、
+  電力は `tag.mekData.EnergyContainers` = `[{Container:0b, stored:"16000000"}]` の形。
+  静水学的反発は MOD の仕様で **4 個積み**が条件（`getInstalledCount() >= 4`）なので、
+  1 個だけで「水中効果が無い」と判断すると MOD 側の仕様をバグと誤認する。
+- 飛行のダブルタップは**状態のトグル**。`abilities.flying` が既に true のときにもう一度叩くと
+  落下が始まる（=「飛んだのに落ちた」に見える）。叩く前に必ず状態を読むこと。
+- 水面より上で space を押すと飛行、水中では泳ぎになる。泳速の測定前に `flying` を false に戻す。
+
+### 残る制約
+
+- 実装備優先は**名前空間単位**で、スロット単位の細かい制御はできない。同じ MOD の装備を
+  実装備とコスメの両方に入れた場合は実装備が勝つ（コスメ側の MOD 能力は出ない）。
+- 対象 MOD が装着判定を `Inventory#armor` の直読みに変えたら、`RealPriority` では追従できない
+  （そのときは ProjectE と同様の個別パッチが要る）。
+

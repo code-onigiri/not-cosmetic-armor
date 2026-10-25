@@ -7,6 +7,7 @@ import dev.codeonigiri.notcosmeticarmor.config.CnaConfig;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticSlots;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
+import dev.codeonigiri.notcosmeticarmor.core.RealPriority;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -97,6 +98,7 @@ public final class CnaCommand {
                         .append(": real=").append(name(real))
                         .append(" cosmetic=").append(name(cosmetic))
                         .append(" modifiers=").append(applied)
+                        .append(" query=").append(RealPriority.prefersReal(real, cosmetic) ? "real" : "cosmetic")
                         .append('\n');
             }
         }

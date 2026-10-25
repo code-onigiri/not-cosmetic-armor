@@ -87,17 +87,23 @@ timeout 1800 nix develop --command xvfb-run -n 98 -s "-screen 0 1280x720x24" \
   他 MOD 同士の衝突で、こちらのせいではないことが多い。
 - `ClassMetadataNotFoundException` は対象 MOD の依存不足（例: fantasy_ending には EndingLib が要る）。
 
-### R7.5. 装備の「見え方」は 3 層ある
+### R7.5. 装備の「見え方」は 4 層ある
 
 MOD が装備を判定する経路は 1 つではない。コスメ機能を入れると、同じ 1 スロットに
 
 1. `getItemBySlot` / `getArmorSlots`（我々が上書きしている「見える層」）
 2. `Inventory#armor`（実体。tick 窓の中ではコスメのコピーが入る）
 3. tick 窓の外へ退避された実装備（`CosmeticState#windowReal`）
+4. **コスメ枠そのもの**（`CosmeticStacks`。CAR の `CAStacksBase`）
 
 が同時に存在する。片方だけ直すと「半分の tick だけ能力が消える」ような壊れ方をする。
-`ArmorSetUnion` は 3 層すべてを見る。MOD 側の判定メソッドを 1 つ特定したら、
+`ArmorSetUnion` は 4 層すべてを見る。MOD 側の判定メソッドを 1 つ特定したら、
 **そのメソッドが tick の内側で呼ばれるか**まで確認すること（`LivingTickEvent` は窓の中）。
+
+1.5.0 で `RealPriority`（実装備優先の名前空間）を入れてから、1 層目の意味が
+**「コスメ」から「実装備（対象名前空間のみ）」に変わりうる**。第 4 層が無いと、
+コスメの装備がどの層にも現れずセット判定が落ちる（実測: `is4=false shield[level=0]`）。
+**query の意味を変えたら、その query を読んでいる互換パッチを全部洗う**こと。
 
 ### R8. 終わったら docs に残す
 
@@ -120,6 +126,7 @@ MOD が装備を判定する経路は 1 つではない。コスメ機能を入�
 | コスメが無い状態だけで「動く」と確認して終えた | コスメを 1 枚載せた瞬間に実装備のセット能力が消える不具合を見逃した | コスメあり/なし × 実装備あり/なしの 2×2 を測る |
 | `/data get` の `abilities.mayfly` が 1b だけで「飛べる」と判断 | サーバーだけ true でクライアントは false。実際には飛べなかった | 能力はサーバー値と実挙動（Y の変化）を両方見る |
 | テレポート直後にダブルタップを送った | チャット欄が 1 回目の押下を吸い、飛ばないと誤読 | 送信後 1 秒待ち、クリックでフォーカスを戻してから押す |
+| `RealPriority` で query の意味を変えたのに、それを読む互換パッチを数えなかった | `ArmorSetUnion` が 3 層前提で、実装備メカスーツが勝った瞬間にコスメの夢幻終焉がどの層にも出ずセットが消えた | 層を増やす/意味を変えるときは、その query の読み手を全部 grep する |
 
 ## 検証ハーネス
 
@@ -160,3 +167,5 @@ CAR のインベントリ経由で書くので同期・保存も通常の編集�
 
 CAR 検出、モード、各スロットの実装備/コスメ、modifier 数、防御力、`projectE: patch/calls/hits`、
 `stepHeight` を 1 画面で出す。まずこれを読む。
+各スロットの `query=` は、そのスロットで `getItemBySlot` が返すのが実装備（`real`）か
+コスメ（`cosmetic`）か。`realPriorityNamespaces` の MOD を実装備に入れると `real` になる。

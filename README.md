@@ -51,6 +51,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 - **動き（jetpack など）**: コスメ装備の tick が `setDeltaMovement` で速度を変えたときは、その変化を `ClientboundSetEntityMotionPacket` で本人にも送り返します。プレイヤーの移動はクライアント権威（クライアントの自己予測が正）なので、これが無いとサーバー側だけで飛んでいる状態になり、画面では何も起きません。
 - **耐久**: 実装備が耐久ダメージを受けたとき、同じスロットのコスメ装備にも**同じ量**のダメージが入ります（4 分の 1 丸め・最低 1 のバニラ規則、Unbreaking、壊れたら消える挙動まで同じ）。`/notcosmeticarmor status` の `dmg=` で両方の耐久値を確認できます。
 - **セット判定（fantasy_ending / EndingLib）**: 4 点セットの判定を「実装備とコスメ枠の合算」に広げます。コスメ枠に別の防具を載せても、実装備の夢幻終焉 4 点セットは消えません（逆に、実装備 2 点 + コスメ 2 点でも 4 セットになります）。判定は EndingLib の `ArmorUtils#getArmorSet` 1 メソッドだけを上書きするので、他の MOD の判定には影響しません。
+- **実装備優先（`behavior.realPriorityNamespaces`）**: Mekanism のように「メカスーツを着ている前提」で能力を判定する MOD では、コスメ枠に別の防具があるとメカスーツの効果（Step Assist・重力変調・静水学的反発ユニットなど）が止まります。そこで、既定で `mekanism` 名前空間の装備だけ、**同じスロットに実装備があれば実装備を返す**ようにしています。tick 窓でもそのスロットの実装備は退避しないので、半 tick おきに能力が消えることはありません。コスメ枠が空、または実装備がその MOD の装備でなければ従来どおりコスメが優先されます（一覧は設定で増減できます）。
 - **相性の悪い MOD への小さなパッチ（同梱）**: `Inventory#armor` を直接読む MOD は、上の 4 層では拾えません。そういう MOD に限り、その MOD の判定メソッド 1 つにだけ注入して「実装備で見つからなければコスメ枠も見る」と広げます。対象 MOD が入っていなければ何も適用されません（現在は ProjectE。下記の[互換性](#互換性実機で確認した-mod)）。
 
 ## 何が機能しないか（意図的）
@@ -71,6 +72,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [ManaitaMTK](https://modrinth.com/mod/manaitamtk) | 1.7.4 | コスメ枠でも「ダメージ 0・死亡しない」が成立 |
 | [AdvancedAE](https://modrinth.com/mod/advanced-ae) | 1.3.6 | 量子ヘルメットの水中呼吸がコスメ枠で動く（アップグレード導入・電力供給が前提） |
 | [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減・**飛翔・Step Assist** がコスメ枠で動く（互換パッチ同梱） |
+| [Mekanism](https://modrinth.com/mod/mekanism) | 10.4.16.80 | 実装備のメカスーツの効果（Step Assist・重力変調・静水学的反発・スキューバ）が動く。コスメ枠に夢幻終焉を着けてもメカスーツの判定は消えない（`behavior.realPriorityNamespaces`） |
 | fantasy_ending（要 EndingLib） | 2.7.20 / 2.2.1fix | 夢幻終焉 4 点のセット効果（128 以下のダメージ無効化・シールド・死亡時復帰・効果無効）が動く。**実装備とコスメ枠の合算で判定**するので、実装備のセットがコスメに隠れない |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
@@ -80,6 +82,10 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 
 ### コスメ枠では効かないもの（MOD 側の実装都合）
 
+- **実装備優先の対象 MOD（既定は Mekanism）のコスメ装備**: 同じスロットにその MOD の実装備があると、
+  判定は実装備側になります。たとえば実装備がメカスーツでコスメ枠にもメカスーツを入れた場合、
+  MOD から見えるのは実装備だけです（バニラの属性・エンチャント・耐久は両方効きます）。
+  対象は `behavior.realPriorityNamespaces` で増減できます。
 - **`Inventory#armor` を直接読む MOD 全般**: 上書きできるのは `getItemBySlot` / `getArmorSlots`
   であって、インベントリの生リストそのものではありません。tick 窓（interleave）の中だけは
   `Inventory#armor` にコスメのコピーが入るので、tick 内で生リストを読む MOD はコスメを見ます。
@@ -122,6 +128,7 @@ ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`I
 | `behavior.tickCosmeticItems` | true | コスメ枠のアイテムを tick する |
 | `behavior.cosmeticDurability` | true | 実装備が受けた耐久ダメージをコスメ装備にも同じ量だけ入れる |
 | `behavior.ignoreSkinArmorFlag` | true | CAR の「skin armor」フラグが立ったスロットも機能させる |
+| `behavior.realPriorityNamespaces` | `["mekanism"]` | この名前空間の装備は、同じスロットに実装備があれば実装備を優先する（MekaSuit 用）。カンマ区切りのリスト |
 | `compat.patchProjectE` | true | ProjectE の飛翔・Step Assist 判定にコスメ枠を足す（ProjectE 導入時のみ意味を持つ） |
 
 ## コマンド
@@ -186,7 +193,8 @@ implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
 2. **クエリ上書き** — `Player#getItemBySlot` の RETURN で、防具スロットかつサーバー側のときだけ
    コスメスタックを返す。`Player#getArmorSlots`（`m_6168_`。バニラのダメージ軽減が回すリスト）も
    同じ条件で、実装備リストをコピーしてコスメに差し替えたリストを返す。実体（`Inventory#armor`）は
-   一切書き換えない。
+   一切書き換えない。ただし「実装備優先」の対象 MOD（既定は Mekanism）の装備が実装備枠にある
+   スロットだけは、その実装備をそのまま返す。
 3. **差分ガード** — バニラは `LivingEntity#tick` の中で毎 tick 装備の差分を取り、
    変化があれば属性を付け替えて `ClientboundSetEquipmentPacket` を送る。その差分処理の間だけ
    上書きを止め、バニラには常に実装備を見せる。これがないと毎 tick パケットが飛び、属性が壊れる。
@@ -427,6 +435,31 @@ fantasy_ending の装備判定（`ArmorUtils#getArmorSet`）は `getItemBySlot` 
   退避されるため、窓の中だけ実装備セットが消える。シールドのレベルが半 tick おきに 0 へ
   リセットされ、HUD バーが出なかった（→ `ArmorSetUnion` が退避中のスタックも見る）。
 
+### Mekanism メカスーツ + コスメ夢幻終焉（実機、1.5.0）
+
+「実装備にメカスーツ（重力変調入り）、コスメ枠に夢幻終焉を 4 点」という構成で、
+どちらの能力も同時に成立することを確認しました（実インスタンスのコピー、Mekanism 10.4.16.80）。
+
+| 見た項目 | 1.4.0（修正前） | 1.5.0（修正後） |
+|---|---|---|
+| `forge:step_height_addition` | 0.6（Step Assist が出ない） | **1.1**（= 0.6 + Step Assist LOW 0.5） |
+| `abilities.mayfly`（重力変調） | 0b | **1b**（ダブルタップで `abilities.flying` = 1b、Y 201.6 → 216.6 / 2 秒） |
+| `forge:swim_speed`（静水学的反発、水中） | 1.0 | **2.0**（水中の上昇も 5.7 → 6.8 ブロック / 2 秒） |
+| 夢幻終焉のセット | `is4=false shield[level=0]`、HUD のバー無し | **is4=true shield[level=4936]**、HUD のバー表示 |
+| `/notcosmeticarmor status` | 4 スロットとも `query=cosmetic` | 4 スロットとも **`query=real`**（メカスーツの判定は実装備側） |
+
+回帰（実装備が空、または実装備が優先対象でない場合）:
+
+| 構成 | 結果 |
+|---|---|
+| 実装備=空 / コスメ=夢幻終焉 4 点 | `query=cosmetic`、`is4=true shield[level=4936]`、`mayfly=1b`、飛行 Y 230.7 → 245.7 / 2 秒（回帰なし） |
+| 実装備=ダイヤ胸当て / コスメ=夢幻終焉 4 点 | そのスロットは `query=cosmetic`（従来どおりコスメが優先）。優先されるのは `behavior.realPriorityNamespaces` の名前空間だけ |
+
+メカスーツ側の条件（Mekanism のソースで確認）: 静水学的反発ユニットは
+`ModuleHydrostaticRepulsorUnit#isSwimBoost` が **4 個積み（`getInstalledCount() >= 4`）・`swim_boost` 有効・水中・電力あり**を要求します。1 個だけでは効果が出ないのは MOD の仕様です。
+重力変調は 1000 J/tick、静水学的反発は 500 J/tick を消費します（既定値）。
+
+![mekanism + fantasy](docs/img/mekanism-fantasy.png)
 ## 謝辞
 
 - [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)（zlainsama / original by dmillerw）— コスメ枠のインベントリと描画。

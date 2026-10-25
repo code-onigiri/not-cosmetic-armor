@@ -7,6 +7,7 @@ import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticTick;
 import dev.codeonigiri.notcosmeticarmor.core.QueryGuard;
+import dev.codeonigiri.notcosmeticarmor.core.RealPriority;
 import dev.codeonigiri.notcosmeticarmor.core.TickWindow;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -51,9 +52,16 @@ public abstract class PlayerMixin {
             }
         }
         ItemStack cosmetic = CosmeticStacks.get(self, slot.getIndex());
-        if (!cosmetic.isEmpty()) {
-            cir.setReturnValue(cosmetic);
+        if (cosmetic.isEmpty()) {
+            return;
         }
+        // Gear of a "real priority" mod (MekaSuit, ...) only works when its own stack is reported:
+        // its modules ask getItemBySlot which armor is worn. See RealPriority for the rationale.
+        ItemStack real = self.getInventory().armor.get(slot.getIndex());
+        if (RealPriority.prefersReal(real, cosmetic)) {
+            return;
+        }
+        cir.setReturnValue(cosmetic);
     }
 
     /**

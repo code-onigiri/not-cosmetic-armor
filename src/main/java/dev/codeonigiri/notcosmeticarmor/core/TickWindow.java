@@ -36,6 +36,11 @@ public final class TickWindow {
             ItemStack real = armor.get(i);
             state.windowReal[i] = real;
             ItemStack cosmetic = CosmeticStacks.get(player, i);
+            if (RealPriority.prefersReal(real, cosmetic)) {
+                // MekaSuit and friends must stay physically present: their tick reads the real slot,
+                // and a parked slot would make half the ticks look empty to them.
+                continue;
+            }
             if (!cosmetic.isEmpty() && !ItemStack.matches(cosmetic, real)) {
                 armor.set(i, cosmetic.copy());
             }

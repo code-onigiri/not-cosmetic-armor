@@ -1,5 +1,6 @@
 package dev.codeonigiri.notcosmeticarmor.config;
 
+import java.util.List;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 /** Server side configuration. */
@@ -14,6 +15,7 @@ public final class CnaConfig {
     public static final ForgeConfigSpec.BooleanValue COSMETIC_DURABILITY;
     public static final ForgeConfigSpec.BooleanValue IGNORE_SKIN_FLAG;
     public static final ForgeConfigSpec.BooleanValue PATCH_PROJECT_E;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> REAL_PRIORITY_NAMESPACES;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -45,6 +47,16 @@ public final class CnaConfig {
         TICK_COSMETIC_ITEMS = builder.define("tickCosmeticItems", true);
         COSMETIC_DURABILITY = builder.define("cosmeticDurability", true);
         IGNORE_SKIN_FLAG = builder.define("ignoreSkinArmorFlag", true);
+        REAL_PRIORITY_NAMESPACES = builder
+                .comment(
+                        "Item namespaces whose armor must be visible in the real slot.",
+                        "Armor of these mods wins the getItemBySlot query even when a cosmetic stack shares the",
+                        "slot, because those mods only ever look at the real armor slot and would otherwise",
+                        "believe the player is wearing nothing. The cosmetic armor still contributes its",
+                        "attributes, enchantments and item tick; only the 'what am I wearing' answer changes.",
+                        "Default: mekanism (MekaSuit modules). Add a namespace when a mod's armor stops working",
+                        "under a cosmetic skin.")
+                .defineListAllowEmpty("realPriorityNamespaces", List.of("mekanism"), o -> o instanceof String);
         builder.pop();
 
         builder.comment(
@@ -94,5 +106,12 @@ public final class CnaConfig {
 
     public static boolean projectECompat() {
         return !SPEC.isLoaded() || PATCH_PROJECT_E.get();
+    }
+
+    public static List<? extends String> realPriorityNamespaces() {
+        if (!SPEC.isLoaded()) {
+            return List.of("mekanism");
+        }
+        return REAL_PRIORITY_NAMESPACES.get();
     }
 }

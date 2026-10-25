@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.5.0 — 2026-10-25
+
+### 修正
+
+- **実装備のメカスーツの効果がコスメ装備に隠れていた**（Mekanism）。
+  実装備にメカスーツ、コスメ枠に別の防具（例: 夢幻終焉）を入れると、Mekanism の Step Assist・
+  重力変調・静水学的反発ユニット・スキューバが止まり、夢幻終焉のセット効果だけが残っていました。
+  Mekanism は装着を `Player#getItemBySlot` で判定するため、コスメ優先の上書きでは
+  メカスーツが見えないのが原因です（`CommonPlayerTickHandler#getStepBoost`、`#getSwimBoost`、`#isGravitationalModulationReady`、`PlayerState#updateFlightInfo`）。
+  対策として **名前空間単位の「実装備優先」**（`RealPriority`）を入れました。同じスロットに
+  その MOD の実装備があれば、クエリは実装備を返します。既定の対象は `mekanism` のみで、
+`behavior.realPriorityNamespaces` で増減できます。tick 窓でも対象スロットは実装備を
+  退避しないので、半 tick おきに能力が消えることはありません。
+- **セット判定のユニオンが新しい層を見落としていた**。`ArmorSetUnion` は「見える層・
+  実体・退避中の実装備」の 3 層だけを見ていたため、実装備優先を入れると 4 スロットすべてで
+  見える層がメカスーツになり、コスメの夢幻終焉がどの層にも現れなくなりました
+  （`set=MekaSuitMaterial is4=false`、シールド HUD 消失）。コスメ枠そのものを第 4 層として
+  見るようにしました。
+
+### 追加
+
+- `/notcosmeticarmor status` のスロット行に `query=real|cosmetic` を追加
+  （そのスロットの判定が実装備とコスメのどちらを見ているか）。
+- 設定 `behavior.realPriorityNamespaces`（既定 `["mekanism"]`）。
+
+### 検証済み（実機、Mekanism 10.4.16.80 + fantasy_ending 2.7.20）
+
+| 構成 | 結果 |
+|---|---|
+| 実装備=メカスーツ 4 点（足: 油圧推進 1、脚: 静水学的反発 4、胸: 重力変調 1 + 電力）/ コスメ=夢幻終焉 4 点 | `stepHeight=1.1`（0.6 + 0.5）、`mayfly=1b` でダブルタップ飛行（Y 201.6 → 216.6 / 2 秒）、水中で `swim_speed=2.0`（無しは 1.0）、`fantasyEnding: is4=true shield[level=4936]` とシールド HUD が同時に成立、4 スロットとも `query=real` |
+| 実装備=空 / コスメ=夢幻終焉 4 点 | `query=cosmetic`、`is4=true`、`mayfly=1b`、飛行 Y 230.7 → 245.7 / 2 秒（回帰なし） |
+| 実装備=ダイヤ胸当て / コスメ=夢幻終焉 | そのスロットは `query=cosmetic`（従来どおりコスメ優先） |
+
+メカスーツ側の前提: 静水学的反発ユニットは 4 個積み + `swim_boost` 有効 + 水中 + 電力が必要
+（Mekanism の仕様）。重力変調は 1000 J/tick、静水学的反発は 500 J/tick を消費します。
 ## 1.4.0 — 2026-10-25
 
 ### 修正

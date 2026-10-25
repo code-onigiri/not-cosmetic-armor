@@ -1,5 +1,6 @@
 package dev.codeonigiri.notcosmeticarmor.compat.endinglib;
 
+import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -52,12 +53,21 @@ public final class ArmorSetUnion {
         ItemStack[] visible = stacks(living::getItemBySlot);
         ItemStack[] real = visible;
         ItemStack[] parked = null;
+        ItemStack[] cosmetic = null;
         if (living instanceof Player player) {
             List<ItemStack> armor = player.getInventory().armor;
             real = new ItemStack[4];
             for (EquipmentSlot slot : SLOTS) {
                 int index = slot.getIndex();
                 real[index] = index < armor.size() ? armor.get(index) : ItemStack.EMPTY;
+            }
+            // The cosmetic stacks as their own layer: since 1.5.0 getItemBySlot reports the real stack
+            // for "real priority" gear (MekaSuit), so the visible layer alone no longer carries the
+            // cosmetic armor of those slots.
+            cosmetic = new ItemStack[4];
+            for (EquipmentSlot slot : SLOTS) {
+                int index = slot.getIndex();
+                cosmetic[index] = CosmeticStacks.get(player, index);
             }
             if (player instanceof ServerPlayer serverPlayer) {
                 CosmeticState state = CosmeticState.peek(serverPlayer);
@@ -71,10 +81,11 @@ public final class ArmorSetUnion {
         collect(candidates, visible);
         collect(candidates, real);
         collect(candidates, parked);
+        collect(candidates, cosmetic);
 
         ArmorMaterial plain = null;
         for (ArmorMaterial material : candidates) {
-            if (count(visible, real, parked, material) < 4) {
+            if (count(visible, real, parked, cosmetic, material) < 4) {
                 continue;
             }
             if (isOptionMaterial(material)) {
@@ -110,11 +121,14 @@ public final class ArmorSetUnion {
         }
     }
 
-    private static int count(ItemStack[] first, ItemStack[] second, ItemStack[] third, ArmorMaterial material) {
+    private static int count(ItemStack[] first, ItemStack[] second, ItemStack[] third, ItemStack[] fourth, ArmorMaterial material) {
         int count = 0;
         for (EquipmentSlot slot : SLOTS) {
             int index = slot.getIndex();
-            if (matches(first, index, material) || matches(second, index, material) || matches(third, index, material)) {
+            if (matches(first, index, material)
+                    || matches(second, index, material)
+                    || matches(third, index, material)
+                    || matches(fourth, index, material)) {
                 count++;
             }
         }
