@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.3.0 — 2026-10-25
+
+### 変更
+
+- **`/notcosmeticarmor status` に `fantasyEnding:` 行を追加**: fantasy_ending（+ EndingLib）が入っているとき、
+  EndingLib の 4 セット判定（`ArmorUtils#getArmorSet`）、fantasy_ending の `FantasyEndingArmorItem#is4Armor`、
+  同期済みのシールドケイパビリティ（`level` / `damageResistance`）を 1 行で出します。クラスはすべて
+  リフレクションで引くので、入っていない環境では `fantasyEnding: absent` になるだけで何も起きません。
+
+### 検証済み（追加）
+
+fantasy_ending 2.7.20 + EndingLibraryTweaked 2.2.1fix の環境で、夢幻終焉の 4 点を**コスメ枠だけ**に
+入れた状態（実装備は空）で確認しました。
+
+| 見たもの | 結果 |
+|---|---|
+| `/notcosmeticarmor status` | `armor=70` / `fantasyEnding: set=FANTASY_ENDING_MATERIAL is4=true shield[level=4936 dr=128.0]` |
+| `/damage @p 50 minecraft:mob_attack` | 無効（HP 547.5 → 547.5） |
+| `/damage @p 150 minecraft:mob_attack` | 通る（HP 547.5 → 545.4） |
+| ヘルメットを 1 枚抜いて 3 点にした対照 | `is4=false` / `shield[level=0]` / `armor=53`、同じ 50 ダメージが 9.8 通る |
+| クライアント側の 4 セット判定 | true（シールド HUD のバーが表示され、残り時間 `1024s` も動く） |
+| `/effect give @p minecraft:poison 10 2` | 付与されない（4 セットのバフ無効化が効いている） |
+
+**サーバー側の防護は 1.2.0 でも 0.1.0 でも成立していました。** 1.3.0 の変更はその状態を
+その場で読めるようにする診断だけで、防護そのものの修正はありません。
+
+### 既知の制限（更新）
+
+- fantasy_ending の防護は仕様上 **128 以下のダメージしか無効化しません**
+  （`FantasyEndingArmorItem#damage_reduction = 128.0F`）。128 を超えるダメージは
+  `IFeShieldCapability#dealDamage` で「128 を引いてから `outResistance` 0.25 を掛ける」扱いになります。
+- 4 セット判定は **同じ material の 4 点**が前提です。1 枚でも別素材（夢影・星屑など）だと発動しません。
+- 0.1.0 の jar はクライアント側でコスメ装備を返さないため、**シールド HUD のバーが出ません**
+  （防護自体はサーバー側で成立します）。1.1.0 以降で解消しています。
+
 ## 1.2.0 — 2026-10-25
 
 ### 変更

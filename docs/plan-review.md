@@ -569,3 +569,88 @@ ProjectE の飛翔と Step Assist は `PlayerHelper#checkArmorHotbarCurios(Playe
 - `GemArmorBase#hasAnyPiece` / `hasFullSet` も `Inventory#armor` の直読みだが、ProjectE 1.20.1 の
   内部に呼び出し箇所が無い（デッドコード）ため対応していない。
 
+
+## 17. fantasy_ending（夢幻終焉セット）— コスメ枠でも防護は成立していた
+
+### 現象
+
+ユーザー報告（m04533、原文）: "じゃあ、次に、Fantasy_endingの無限終焉装備も無限終焉防護が効かなったりするのを直してください"
+
+無限終焉（= 夢幻終焉 / fantasy_ending の `FANTASY_ENDING_MATERIAL`）の 4 点セットには、
+128 以下のダメージを無効化する「シールド」がある。これをコスメ枠に入れると効かない、という報告。
+
+### 経路の特定（ソース読解）
+
+EndingLib（`EndingLibraryTweaked-1.20.1-2.2.1fix.jar`）と fantasy_ending
+（`fantasy_ending-1.20.1-2.7.20-all.jar`）を Vineflower で展開して追った。
+
+- `/tmp/el/src/com/mega/endinglib/util/mc/entity/armor/ArmorUtils.java:163-183`
+  `getArmorSet(LivingEntity)`: HEAD の material を基準に `EquipmentSlot.Type.ARMOR` の 4 枠を回り、
+  **同じ material が 4 つ揃ったときだけ** material を返す。`armorSet(living, material)` はその比較。
+  1 枠 1 回の `getItemBySlot` 呼び出しで、`Inventory#armor` の直読みは無い。
+- `/tmp/el/src/com/mega/endinglib/common/eventhandler/ArmorEvents.java`
+  `PlayerTickEvent` / `LivingAttackEvent` / `LivingHurtEvent` / `LivingDamageEvent` / `LivingDeathEvent` /
+  `MobEffectApplicable` のすべてが `getArmorSet` をゲートにしている。
+- `/tmp/fesrc/com/mega/uom/common/items/armor/FantasyEndingArmorItem.java:68`
+  `is4Armor(LivingEntity)` = `ArmorUtils.armorSet(living, ModArmorMaterials.FANTASY_ENDING_MATERIAL)`。
+  同 `:76` `public static float damage_reduction = 128.0F;`。
+  `onArmorSetLivingAttack`: 128 以下、または HP が半分以下で飛翔物なら `event.setCanceled(true)`。
+  `when4SetTick`: 10 tick ごとに `FE_SHIELD_EC` へ `setMaxLifeTime(20481)/setPerCooldowns(20)/
+  setDamageResistance(128)/setOutResistance(0.25)/setLevel((short)4936)`。
+- `/tmp/fesrc/.../runic/IFeShieldCapability.java` `dealDamage`:
+  `if (is4Armor(direct) && amount > 128.0F) amount -= 128.0F; context.setAmount(amount * (1.0F - getOutResistance()));`
+- `FeRunicShieldCapability#onHurt`: `amount <= getDamageResistance()` でキャンセル。
+
+**判定経路はすべて `getItemBySlot`（= 我々の L3 クエリ上書き）を通る。** ProjectE の飛翔のように
+`Inventory#armor` を直読みする箇所は無い。したがってソース上は「コスメ枠でも効くはず」だった。
+
+### 実測（Forge 47.4.28 / CAR 1.20.1-v1a / fantasy_ending 2.7.20 / EndingLib 2.2.1fix）
+
+コスメ枠に夢幻終焉 4 点だけを入れ、実装備は空。計測は **overworld**、`/difficulty hard` +
+`/gamerule naturalRegeneration false`。
+
+| 見たもの | 4 点 | 3 点（ヘルメットを抜く） |
+|---|---|---|
+| `/notcosmeticarmor status` の `armor` | 70（15+18+20+17） | 53 |
+| `fantasyEnding:` 行 | `set=FANTASY_ENDING_MATERIAL is4=true shield[level=4936 dr=128.0]` | `set=none is4=false shield[level=0 dr=128.0]` |
+| `/damage @p 50 minecraft:mob_attack` | キャンセル（HP 547.50037 → 547.50037） | HP 569.3 → 559.5（9.8 通る） |
+| `/damage @p 150 minecraft:mob_attack` | HP 547.50037 → 545.43787（2.06 通る） | — |
+| `/damage @p 50 minecraft:generic` | キャンセル | — |
+| `/damage @p 20 minecraft:fall` | 通る（569.3 → 531.8、37.5 減） | — |
+| クライアント側のセット判定 | true（シールド HUD のバーが出る） | — |
+| `/effect give @p minecraft:poison 10 2` | 付与されない（`active_effects` 空） | — |
+
+**結論: サーバー側の防護はコスメ枠で成立している。修正不要。**
+128 超が通るのは仕様（`damage_reduction = 128.0F` が上限）。`fall` が通るのは
+`onArmorSetLivingAttack` が見るのが `LivingAttackEvent` の全般だが、シールド側の
+ダメージ種別フィルタで落下は対象外のため。
+
+### 「効かない」の正体（3 つ）
+
+1. **ダメージが 128 を超えている。** 128 以下しか無効化しない。超過分は
+   `amount -= 128` のあと `*(1 - 0.25)` される。
+2. **4 点が同一 material で揃っていない。** 夢影・星屑など別セットを混ぜると `is4=false` になる。
+3. **古い jar を使っている。** 0.1.0 の jar ではクライアント側の `getItemBySlot` が
+   `ServerPlayer` 限定で早期 return するため、クライアント側の `getArmorSet` が false になり
+   **シールド HUD のバーが出ない**（防護自体はサーバー側で成立する）。
+   1.1.0（commit `fb18c37`「client queries: report cosmetic armor on the client as well」）で解消。
+
+### 罠: 夢幻終焉の次元ではセット無しでも小ダメージが無効化される
+
+`fantasy_ending:faded_void`（HUD 表記「夢幻終焉の岸」）では、**夢幻終焉の 4 点を着ていない状態でも**
+`/damage @p 50 minecraft:mob_attack` がキャンセルされた。次元自体が小ダメージを無効化するため、
+セット効果の検証は必ず `/execute in minecraft:overworld run tp @p 0 100 0` などで
+通常世界へ出てから行うこと。
+
+### 1.3.0 の変更
+
+コードの変更は診断 1 行のみ。`/notcosmeticarmor status` に
+`fantasyEnding: set=<material> is4=<bool> shield[level=N dr=F]` を出す
+（`src/main/java/dev/codeonigiri/notcosmeticarmor/compat/endinglib/EndingLibCompat.java`、
+すべてリフレクション。クラスが無ければ `absent`）。
+
+### 残る制約
+
+- 128 のしきい値と `outResistance 0.25` は fantasy_ending 側の実装。こちらでは調整しない。
+- `ArmorUtils#getArmorSet` が `getItemBySlot` 以外の経路に変わったら追従が要る
+  （`/notcosmeticarmor status` の `is4` が false になったことで気づける）。

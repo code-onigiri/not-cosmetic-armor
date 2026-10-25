@@ -70,6 +70,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [ManaitaMTK](https://modrinth.com/mod/manaitamtk) | 1.7.4 | コスメ枠でも「ダメージ 0・死亡しない」が成立 |
 | [AdvancedAE](https://modrinth.com/mod/advanced-ae) | 1.3.6 | 量子ヘルメットの水中呼吸がコスメ枠で動く（アップグレード導入・電力供給が前提） |
 | [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減・**飛翔・Step Assist** がコスメ枠で動く（互換パッチ同梱） |
+| fantasy_ending（要 EndingLib） | 2.7.20 / 2.2.1fix | 夢幻終焉 4 点のセット効果（128 以下のダメージ無効化・シールド）がコスメ枠で動く |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
 独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
@@ -103,8 +104,9 @@ ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`I
 - **Re-Avaritia 1.4.2 + irons_lib 2.2.0**: 両者が `LocalPlayerMixin` の同じメソッドに
   `@Redirect` を当てており、`Critical injection failure: Redirector avaritia$shieldDoesNotSlowMovement ... (0/1) succeeded`
   で起動が止まります。本 MOD と CAR を外しても同じように落ちることを確認しました。
-- **fantasy_ending 2.7.20**: `com.mega.endinglib.util.mc.entity.armor.ArmorUtils` が見つからず
-  `ClassMetadataNotFoundException`。EndingLib が別途必要です（jar には含まれていません）。
+- **fantasy_ending 2.7.20**（EndingLib が無い場合）: `com.mega.endinglib.util.mc.entity.armor.ArmorUtils` が
+  見つからず `ClassMetadataNotFoundException`。EndingLib は別途必要な依存で、jar には含まれていません。
+  EndingLib を入れた構成では起動し、夢幻終焉セットの防護がコスメ枠で動くことを実機で確認済みです（下の検証ログ）。
 
 ## 設定
 
@@ -376,6 +378,31 @@ jetpack は燃料を消費しません（クライアント側の表示だけ減
 飛翔の開始は**ジャンプのダブルタップ**である点に注意してください。キー入力の押下が短すぎると
 （12 ms 程度）クライアントの入力サンプリングに拾われず、2 回目の押下が「押しっぱなしの継続」と
 判定されて飛びません。
+
+### fantasy_ending（夢幻終焉セット）の検証（実機）
+
+fantasy_ending 2.7.20 + EndingLibraryTweaked 2.2.1fix。夢幻終焉の 4 点（ヘルメット・チェストプレート・
+レギンス・ブーツ）を**コスメ枠だけ**に入れ、実装備は空にしました。
+
+| 見たもの | 結果 |
+|---|---|
+| `/notcosmeticarmor status` | `armor=70`（15+18+20+17 の属性ミラー） |
+| 4 セット判定（サーバー / クライアント） | `is4=true` / シールド HUD のバーが表示される |
+| シールドのケイパビリティ | `level=4936 dr=128.0` |
+| `/damage @p 50 minecraft:mob_attack` | 無効（HP 547.5 → 547.5） |
+| `/damage @p 150 minecraft:mob_attack` | 通る（HP 547.5 → 545.4） |
+| ヘルメットを抜いて 3 点にした対照 | `is4=false` / `shield[level=0]` / `armor=53`、同じ 50 が 9.8 通る |
+
+fantasy_ending の装備判定（`ArmorUtils#getArmorSet`）は `getItemBySlot` を 4 回呼ぶだけなので、
+パッチ無しでそのまま動きます。**「効かない」と感じるときは次の 3 つを疑ってください。**
+
+- ダメージが 128 を超えている（仕様上、128 以下しか無効化しません。超過分は 128 を引いて 0.75 倍）
+- 4 点が同じ素材で揃っていない（1 枚でも別素材だとセットになりません）
+- 古い jar（0.1.0 など 1.1.0 未満）を使っている（サーバー側の防護は効きますが、クライアント側の
+  セット判定が false になり、シールド HUD が出ません）
+
+なお、夢幻終焉の次元（`fantasy_ending:faded_void`）では**セットを着ていなくても**小さいダメージが
+無効化されるため、検証は通常世界（overworld）で行う必要があります。
 
 ## 謝辞
 

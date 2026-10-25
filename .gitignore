@@ -9,6 +9,9 @@ result-*
 
 run-data/
 .mixin.out/
+# fantasy_ending の coremod と JVM attach がカレントに吐くもの（実機検証の副産物）
+fantasy_ending_logs.txt
+temp_agent_native.txt
 config/
 patchouli_data.json
 .gradle/

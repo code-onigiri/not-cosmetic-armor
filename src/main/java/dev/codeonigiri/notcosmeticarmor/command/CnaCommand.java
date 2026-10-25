@@ -1,6 +1,7 @@
 package dev.codeonigiri.notcosmeticarmor.command;
 
 import dev.codeonigiri.notcosmeticarmor.car.CarBridge;
+import dev.codeonigiri.notcosmeticarmor.compat.endinglib.EndingLibCompat;
 import dev.codeonigiri.notcosmeticarmor.compat.projecte.ProjectECompat;
 import dev.codeonigiri.notcosmeticarmor.config.CnaConfig;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticSlots;
@@ -54,6 +55,7 @@ public final class CnaCommand {
                     .append(" probe=").append(state != null && state.probe)
                     .append('\n');
             out.append("  carInv: ").append(CarBridge.describe(player.getUUID())).append('\n');
+            out.append("  fantasyEnding: ").append(EndingLibCompat.describe(player)).append('\n');
             out.append("  projectE: patch=").append(CnaConfig.projectECompat())
                     .append(" calls=").append(ProjectECompat.CALLS.get())
                     .append(" hits=").append(ProjectECompat.HITS.get())
