@@ -32,6 +32,7 @@ public final class CarBridge {
 
     private static boolean initialized;
     private static Method getCAStacks;
+    private static Method getCAStacksClient;
     private static Method getStackInSlot;
     private static Method isSkinArmor;
     private static Method setStackInSlot;
@@ -74,6 +75,11 @@ public final class CarBridge {
             Class<?> api = lookup(API_CLASS);
             Class<?> base = lookup(STACKS_CLASS);
             getCAStacks = api.getMethod("getCAStacks", UUID.class);
+            try {
+                getCAStacksClient = api.getMethod("getCAStacksClient", UUID.class);
+            } catch (NoSuchMethodException ignored) {
+                getCAStacksClient = null;
+            }
             getStackInSlot = base.getMethod("getStackInSlot", int.class);
             try {
                 isSkinArmor = base.getMethod("isSkinArmor", int.class);
@@ -87,6 +93,7 @@ public final class CarBridge {
             }
         } catch (Throwable t) {
             getCAStacks = null;
+            getCAStacksClient = null;
             getStackInSlot = null;
             isSkinArmor = null;
         }
@@ -94,17 +101,29 @@ public final class CarBridge {
 
     public static boolean available() {
         init();
-        return getCAStacks != null && getStackInSlot != null;
+        return getStackInSlot != null && (getCAStacks != null || getCAStacksClient != null);
     }
 
     /** @return the raw cosmetic stack for {@code slot} (0..3), or {@link ItemStack#EMPTY}. */
     public static ItemStack get(UUID playerId, int slot) {
+        return get(playerId, slot, false);
+    }
+
+    /**
+     * @param client true to read CAR's client side mirror ({@code getCAStacksClient}) instead of the
+     *     server side inventory. The two are distinct objects: the server one is loaded from the player
+     *     data file, the client one is filled by CAR's sync packets, and asking for the wrong one either
+     *     returns stale data or throws {@code UnsupportedOperationException} on a dedicated server.
+     * @return the raw cosmetic stack for {@code slot} (0..3), or {@link ItemStack#EMPTY}.
+     */
+    public static ItemStack get(UUID playerId, int slot, boolean client) {
         init();
-        if (getCAStacks == null) {
+        Method lookup = client ? getCAStacksClient : getCAStacks;
+        if (lookup == null) {
             return ItemStack.EMPTY;
         }
         try {
-            Object stacks = getCAStacks.invoke(null, playerId);
+            Object stacks = lookup.invoke(null, playerId);
             if (stacks == null) {
                 return ItemStack.EMPTY;
             }
@@ -166,12 +185,17 @@ public final class CarBridge {
     }
 
     public static boolean isSkinArmor(UUID playerId, int slot) {
+        return isSkinArmor(playerId, slot, false);
+    }
+
+    public static boolean isSkinArmor(UUID playerId, int slot, boolean client) {
         init();
-        if (getCAStacks == null || isSkinArmor == null) {
+        Method lookup = client ? getCAStacksClient : getCAStacks;
+        if (lookup == null || isSkinArmor == null) {
             return false;
         }
         try {
-            Object stacks = getCAStacks.invoke(null, playerId);
+            Object stacks = lookup.invoke(null, playerId);
             if (stacks == null) {
                 return false;
             }

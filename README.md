@@ -43,7 +43,8 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 ## 何が機能するか
 
 - **属性**: コスメ防具の attribute modifier（防御力、防具強度、ノックバック耐性、移動速度など）を実装備の上に加算。UUID はプレイヤー・スロットごとに再生成するので、実装備の modifier と衝突しません。
-- **エンチャント**: `Player#getItemBySlot` と `Player#getArmorSlots` の両方を上書きしてコスメ装備を「着ている防具」として返すため、バニラのダメージ軽減（Protection / Feather Falling / Thorns）や他 MOD の参照にもコスメ防具が見えます。バニラの軽減計算は `getItemBySlot` ではなく `getArmorSlots` のリストを回すため、片方だけでは効きません。
+- **エンチャント**: `Player#getItemBySlot` と `Player#getArmorSlots` の両方を上書きしてコスメ装備を「着ている防具」として返すため、バニラのダメージ軽減（Protection / Feather Falling / Thorns / Respiration）や他 MOD の参照にもコスメ防具が見えます。バニラの軽減計算は `getItemBySlot` ではなく `getArmorSlots` のリストを回すため、片方だけでは効きません。
+  この上書きは**クライアント側でも**効きます（CAR の `CosArmorAPI.getCAStacksClient` からコスメを読む）。水中呼吸のようにクライアント側の判定も見る MOD や、クライアントで完結する表示にコスメ装備を反映させるためです。描画中だけは CAR の差し替えと二重にならないよう止めています（[描画（L4）](#描画l4)）。
   同じスロットの実装備のエンチャントとも**合算**されます（属性ミラーと同じ「両方足す」方針）。バニラの軽減は EPF の合計が 20 で頭打ちなので、二重に Protection IV を積んでも上限を超えません。
 - **tick 内の参照（インタリーブ）**: 奇数ゲーム tick の `Player#tick` の間だけ、コスメ装備を実装備枠に**コピー**して入れ、tick の終わりに元へ戻します。鞘翅の滑翔判定、カメの甲羅の水中呼吸、MOD の「この装備を着ているか」判定など、tick の内側で `getItemBySlot` を読む処理にもコスメ装備が見えます。クライアントには何も送られず、実装備は一切失われません。
 - **item tick**: コスメ枠のアイテムにも `inventoryTick` / Forge の `onArmorTick` が走ります。エネルギーやチャージを持つ MOD 防具（TiC など）の動作に必要です。
@@ -66,10 +67,32 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [Tinkers' Construct](https://modrinth.com/mod/tinkers-construct) + Mantle | 3.12.1.231 / 2023.11.24 | コスメ枠の属性・耐久ミラーが動く（`ArmorItem` 系） |
 | [Iron Jetpacks](https://modrinth.com/mod/iron-jetpacks) + Cucumber | 7.0.9 / 7.0.16 | コスメ枠で飛行する（速度は実装備側が優先） |
 | [ManaitaMTK](https://modrinth.com/mod/manaitamtk) | 1.7.4 | コスメ枠でも「ダメージ 0・死亡しない」が成立 |
+| [AdvancedAE](https://modrinth.com/mod/advanced-ae) | 1.3.6 | 量子ヘルメットの水中呼吸がコスメ枠で動く（アップグレード導入・電力供給が前提） |
+| [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減は動く。ジェムの飛翔と Step Assist は動かない（下記） |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
 独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
-結果が変わります（[仕組み](#仕組み)）。
+結果が変わります（[仕組み](#仕組み)）。`Inventory#armor` を直接読む MOD は、
+そのリスト自体を書き換えない限りコスメ装備を見ません。
+
+### コスメ枠では効かないもの（MOD 側の実装都合）
+
+- **ProjectE のジェム防具の飛翔・Step Assist**: `PlayerHelper.checkArmorHotbarCurios` が
+  `player.getInventory().armor`（実装備リスト）を直接 stream するため、コスメ枠の
+  ジェムアーマーは判定に入りません。同じ MOD の満腹度回復（`GemArmorBase#onArmorTick`）や
+  ダメージ軽減（`PlayerEvents#onLivingHurt` → `getItemBySlot`）、
+  `TickEvents`（`getArmorSlots`）は動きます。
+- **`Inventory#armor` を直接読む MOD 全般**: 上書きできるのは `getItemBySlot` / `getArmorSlots`
+  であって、インベントリの生リストそのものではありません。tick 窓（interleave）の中だけは
+  `Inventory#armor` にコスメのコピーが入るので、tick 内で生リストを読む MOD はコスメを見ます。
+
+### 本 MOD が原因ではない起動クラッシュ（実機で切り分け済み）
+
+- **Re-Avaritia 1.4.2 + irons_lib 2.2.0**: 両者が `LocalPlayerMixin` の同じメソッドに
+  `@Redirect` を当てており、`Critical injection failure: Redirector avaritia$shieldDoesNotSlowMovement ... (0/1) succeeded`
+  で起動が止まります。本 MOD と CAR を外しても同じように落ちることを確認しました。
+- **fantasy_ending 2.7.20**: `com.mega.endinglib.util.mc.entity.armor.ArmorUtils` が見つからず
+  `ClassMetadataNotFoundException`。EndingLib が別途必要です（jar には含まれていません）。
 
 ## 設定
 
@@ -165,13 +188,20 @@ implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
 
 ## 描画（L4）
 
-見た目の差し替えは CAR の担当です。本 MOD は描画コードを持たず、mixin はクライアント側で
-何も変更しません（`PlayerMixin` は `isClientSide()` で早期 return、`LivingEntityMixin` は
-`ServerPlayer` のみ対象）。
+見た目の差し替えは CAR の担当です。本 MOD は描画コードを持たず、防具モデルも描きません。
 
-CAR は `RenderPlayerEvent.Pre` でクライアントの `Inventory#armor` をコスメに入れ替え、
-`Post` で元に戻します。入れ替え元は CAR 自身のインベントリ（`InventoryCosArmor`）で、
-`getItemBySlot` は経由しません。したがってこの MOD のクエリ上書きとはぶつかりません。
+CAR は `RenderPlayerEvent.Pre`（優先度 HIGH）でクライアントの `Inventory#armor` をコスメに
+入れ替え、`Post`（優先度 LOW）で元に戻します。入れ替え元は CAR 自身のインベントリ
+（`InventoryCosArmor`）で、`getItemBySlot` は経由しません。
+
+クライアント側のクエリ上書きを入れたことで、この入れ替えの窓の中では本 MOD の上書きが
+コスメを二重に返してしまいます。そこで `ClientRenderGuard` が
+`RenderPlayerEvent.Pre`（優先度 LOWEST、= CAR の入れ替えより後）から
+`Post`（優先度 LOWEST、= CAR の復元より後）までの間だけ上書きを止めます
+（`QueryGuard`）。結果として描画パスの間は CAR の入れ替えだけが見え、二重描画も
+「コスメを消す」ような取りこぼしも起きません。Pre がキャンセルされた場合は Post が
+来ないので、その場でフラグを戻します。
+
 二重描画を止めるための `HumanoidArmorLayer#renderArmorPiece` の mixin（計画書の M11）は
 不要と判断し、入れていません。
 
@@ -233,6 +263,33 @@ EPF 28 → 上限 20 の 4.0 になります。
 
 TiC 防具（`tconstruct:plate_chestplate`、`ArmorItem` 系）も属性ミラー・耐久ミラーが
 そのまま動き、モブ攻撃 3 回で実装備 22→28/528、コスメ 0→6/208 と同量ずつ減りました。
+
+### 水中呼吸（Respiration）の検証（実機）
+
+コスメ枠に Respiration III の金ヘルメットだけを入れて（実装備は空）、水柱の中で泡の数を数えました。
+**泡の数は `SynchedEntityData` で同期されるサーバー値の表示**なので、泡を見ればサーバー側の
+エンチャント判定をそのまま測れます（`/data get entity @p Air` をチャット越しに読むと往復に
+数十秒かかり、前回はそれを経過時間と取り違えて「効いていない」と誤読しました）。
+
+1. `/gamemode creative` → 水面より上で Air を 300 まで回復。
+2. `/fill -2 90 -2 2 105 2 minecraft:water` で水柱を作る。
+3. `/gamemode survival` にして水柱の中へ移動し、13 秒後に撮影。
+
+結果は**泡 7 個（Air 210〜240）・ハート満タン**。Respiration III の期待損失は
+260 tick × 0.25 = 65 なので 8 個弱で、観測と一致します。エンチャント無しなら 13 秒で
+1 個以下＋溺死ダメージになるため、**コスメ枠の Respiration は正しく効いています**。
+
+### AdvancedAE 量子ヘルメットの水中呼吸（実機）
+
+[AdvancedAE](https://modrinth.com/mod/advanced-ae) 1.3.6 の量子ヘルメット（`advanced_ae:quantum_helmet`）に
+`water_breathing_tag:{enabled:1b}` と `internalCurrentPower` / `internalMaxPower` を入れたものを
+コスメ枠の HEAD に置き、同じ水柱で 21 秒間過ごしました。**泡は 10 個のまま減りません**。
+
+AdvancedAE の判定は `AAELivingEntityEvents#breath` が `player.getItemBySlot(HEAD)` を見て
+`LivingBreatheEvent#setCanBreathe` を立てる経路なので、本 MOD のクエリ上書きにそのまま乗ります。
+効かない場合は (1) ヘルメットに水中呼吸アップグレードが入っていない、
+(2) アップグレードが `enabled` になっていない、(3) 電力がコスト未満、のいずれかです
+（`isUpgradePowered` は `ForgeCapabilities.ENERGY` の残量が `UpgradeType#getCost` 以上かを要求します）。
 
 ### 他 MOD の「装備判定」との連携（まな板MTK）
 

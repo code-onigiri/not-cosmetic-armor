@@ -68,16 +68,19 @@ cosmetic set **actually function**, so what you see is what you get.
 - **Attributes** — armor, toughness, knockback resistance and any other attribute modifier the item
   declares are added on top of your real armor. Modifier UUIDs are regenerated per player and slot,
   so they never collide with the real armor.
-- **Enchantments** — Protection, Feather Falling, Thorns and friends apply, and they stack with the
-  enchantments on the real armor (vanilla caps total EPF at 20).
+- **Enchantments** — Protection, Feather Falling, Thorns, Respiration and friends apply, and they
+  stack with the enchantments on the real armor (vanilla caps total EPF at 20). The query override
+  covers both sides, so mods that check for worn armor on the client (water breathing, flight) see
+  the cosmetic piece too.
 - **Item ticks** — `inventoryTick` / Forge's `onArmorTick` run for cosmetic items, so modded armor
   that does its work on tick (energy storage, jetpacks) behaves normally.
 - **Durability** — damage taken by the real armor is mirrored onto the cosmetic piece.
 - **Movement** — if a cosmetic item changes the player's velocity, that change is sent back to the
   owner, so jetpacks in a cosmetic slot actually lift you.
 
-The real armor keeps working as real armor: this mod never removes it, never rewrites the armor
-inventory outside a tick, and never touches rendering (Cosmetic Armor Reworked still draws the look).
+The real armor keeps working as real armor: this mod never removes it and never rewrites the armor
+inventory outside a tick. Rendering is Cosmetic Armor Reworked's job — this mod has no renderer of
+its own, and steps out of the way while CAR swaps in the cosmetic set.
 
 ## Requirements
 
@@ -111,6 +114,8 @@ inventory outside a tick, and never touches rendering (Cosmetic Armor Reworked s
 - Jetpack thrust is one stack's worth; a real and a cosmetic jetpack do not stack (the real one wins).
 - Anything that reads `getItemBySlot` / `getArmorSlots` sees the cosmetic item, including cheat-style
   mods. Do not put this on a server where that matters.
+- Mods that read `Inventory#armor` directly (ProjectE's gem armor flight, for example) do not see a
+  cosmetic piece except inside the tick window.
 
 Licensed MIT. Sources and issues on GitHub.
 ```

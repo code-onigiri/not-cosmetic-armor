@@ -6,6 +6,7 @@ import dev.codeonigiri.notcosmeticarmor.core.CosmeticSlots;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticTick;
+import dev.codeonigiri.notcosmeticarmor.core.QueryGuard;
 import dev.codeonigiri.notcosmeticarmor.core.TickWindow;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -36,17 +37,20 @@ public abstract class PlayerMixin {
             return;
         }
         Player self = (Player) (Object) this;
-        if (self.level().isClientSide() || !(self instanceof ServerPlayer player)) {
-            return;
-        }
         if (!CnaConfig.enabled() || !CnaConfig.overrideQueries()) {
             return;
         }
-        CosmeticState state = CosmeticState.of(player);
-        if (state.bookkeeping) {
-            return;
+        if (self.level().isClientSide()) {
+            if (QueryGuard.suspended()) {
+                return;
+            }
+        } else if (self instanceof ServerPlayer player) {
+            CosmeticState state = CosmeticState.peek(player);
+            if (state != null && state.bookkeeping) {
+                return;
+            }
         }
-        ItemStack cosmetic = CosmeticStacks.get(player, slot.getIndex());
+        ItemStack cosmetic = CosmeticStacks.get(self, slot.getIndex());
         if (!cosmetic.isEmpty()) {
             cir.setReturnValue(cosmetic);
         }
@@ -62,19 +66,22 @@ public abstract class PlayerMixin {
     @Inject(method = "getArmorSlots", at = @At("RETURN"), cancellable = true)
     private void notcosmeticarmor$getArmorSlots(CallbackInfoReturnable<Iterable<ItemStack>> cir) {
         Player self = (Player) (Object) this;
-        if (self.level().isClientSide() || !(self instanceof ServerPlayer player)) {
-            return;
-        }
         if (!CnaConfig.enabled() || !CnaConfig.overrideQueries()) {
             return;
         }
-        CosmeticState state = CosmeticState.peek(player);
-        if (state == null || state.bookkeeping) {
-            return;
+        if (self.level().isClientSide()) {
+            if (QueryGuard.suspended()) {
+                return;
+            }
+        } else if (self instanceof ServerPlayer player) {
+            CosmeticState state = CosmeticState.peek(player);
+            if (state != null && state.bookkeeping) {
+                return;
+            }
         }
         List<ItemStack> merged = null;
         for (int i = 0; i < CosmeticSlots.COUNT; i++) {
-            ItemStack cosmetic = CosmeticStacks.get(player, i);
+            ItemStack cosmetic = CosmeticStacks.get(self, i);
             if (cosmetic.isEmpty()) {
                 continue;
             }

@@ -8,6 +8,9 @@ result-*
 .direnv/
 
 run-data/
+.mixin.out/
+config/
+patchouli_data.json
 .gradle/
 *.iml
 .idea/

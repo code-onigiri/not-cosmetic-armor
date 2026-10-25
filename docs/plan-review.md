@@ -453,3 +453,50 @@ jetpack の推力は `min(motionY + accel, speedVert)` を **1 スタック**（
 が false のとき、`InventoryManager#handlePlayerDrops` が `.cosarmor` を空にして
 `ItemEntity` を湧かせる）。本 MOD は CAR のインベントリを書き換えないため、この挙動は
 バニラの防具と同じ。
+
+## 15. 追記（クライアント側のクエリも通すことにした — AAE の水中呼吸の件）
+
+### きっかけ
+
+実インスタンス（NCA）で「AdvancedAE の水中呼吸が効かない」との報告。ソースを読むと
+`AAELivingEntityEvents#breath` は `player.getItemBySlot(HEAD)` を見て
+`LivingBreatheEvent#setCanBreathe` を立てるだけだった。経路自体は本 MOD の
+`getItemBySlot` 上書きに乗るので、**サーバー側だけを見れば効くはず**だった。
+
+### 実装前の設計（サーバー専用にしていた理由）
+
+`PlayerMixin` は `self.level().isClientSide()` で早期 return していた。理由は 2 つ:
+
+1. CAR が描画時に `Inventory#armor` をコスメに入れ替えるので、クライアント側で上書きすると
+   二重適用になる。
+2. クライアントのコスメ取得は CAR の `CosArmorAPI.getCAStacksClient` で別 API になる。
+
+### 変更
+
+- `CarBridge` に `getCAStacksClient` を追加し、`get(uuid, slot, boolean client)` に統一。
+  `available()` は `getStackInSlot` と（`getCAStacks` か `getCAStacksClient` のどちらか）が
+  揃っていれば true とし、片方だけの API jar 構成でも壊れないようにした。
+- `CosmeticStacks#get(Player, int)` が `player.level().isClientSide()` で API を切り替える。
+- `core/QueryGuard`（新規）: 描画中だけクエリ上書きを止めるフラグ。
+- `client/ClientRenderGuard`（新規）: `RenderPlayerEvent.Pre`(LOWEST, receiveCanceled) で
+  suspend、`Post`(LOWEST) で resume。CAR は Pre=HIGH / Post=LOW なので、必ず CAR の
+  入れ替えの内側になる。Pre がキャンセルされたら Post が来ないので、その場で resume する。
+- `getArmorSlots` はクライアントでもコスメを**追加**する（置換ではない）。
+
+### 実測
+
+| 見たもの | 結果 |
+|---|---|
+| 三人称のモデル（コスメ HEAD = 金ヘルメット / 量子ヘルメット） | 1 回だけ描画。二重描画なし。HUD の防具バーも実装備のまま |
+| コスメ Respiration III 金ヘルメットで 13 秒水中 | 泡 7 個（期待どおり） |
+| コスメ AdvancedAE 量子ヘルメット（`water_breathing_tag:{enabled:1b}` + 電力 200 万）で 21 秒水中 | 泡 10 個のまま減らない |
+
+`grep Exception` は他 MOD の既存警告のみで、本 MOD 由来の例外は出ていない。
+
+### 残る制約
+
+- クライアント側のコスメは CAR のクライアントコピーが正であることが前提。サーバーとずれると
+  1 tick だけ古い値が見えることがある（CAR の仕様）。
+- `Inventory#armor` を直接読む MOD（ProjectE のジェム飛翔など）は、tick 窓の外では
+  コスメを見ない。上書きできるのは `getItemBySlot` / `getArmorSlots` まで。
+
