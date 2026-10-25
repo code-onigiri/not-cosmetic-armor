@@ -354,3 +354,47 @@ plan.md の M8 は `Player#getItemBySlot` の上書きだけでエンチャン�
 - `LivingEntity#getArmorCoverPercentage`（`m_21207_`）もこのリストを数えるため、被覆率が
   実装備 + コスメの比率になる（炎上中の軽減など、バニラの式にそのまま乗る）。
 
+## 13. 追記（他 MOD の「装備判定」はどこまで通るか = まな板MTK）
+
+L3（`getItemBySlot`）+ item tick（`CosmeticItemTicker`）が、外部 MOD の装備判定にどこまで
+届くかの実例。[ManaitaMTK](https://modrinth.com/mod/manaitamtk) 1.7.4 のヘルメットは
+「装備中は全てのダメージ 0・死亡しない」チート装備だが、**コスメ枠でもそのまま成立した**。
+
+### 相手側の実装（逆コンパイルで確認）
+
+- `HelmetManaita#inventoryTick`（`m_6883_`）: `player.getItemBySlot(EquipmentSlot.HEAD)` が
+  まな板ヘルメットかを調べ、自分自身の ItemStack に `IInvincible` capability を付ける
+  （`setInvincible(isEquipHelmet)`）。
+- `MTKSubscribeEvent` が `LivingAttackEvent` / `LivingHurtEvent` / `LivingDamageEvent` /
+  `LivingDeathEvent` / `LivingKnockBackEvent` などで `MTKEventHelper.cancel(event)` を呼ぶ。
+  `cancel` は `MTKCapabilityHelper.execute(INVINCIBLE, player, EquipmentSlot.HEAD, ...)` →
+  `player.getItemBySlot(HEAD)` の capability を見て `event.setCanceled(true)`。
+
+### 本 MOD で成立した理由
+
+1. `CosmeticItemTicker` がコスメ枠のアイテムに `onInventoryTick`（→ `ItemStack#inventoryTick`）
+   を回すので、コスメのまな板ヘルメットの `inventoryTick` がサーバー側で走る。
+2. その中で読む `getItemBySlot(HEAD)` が、本 MOD の L3 上書きでコスメを返す → capability が立つ。
+3. ダメージ時に同じ `getItemBySlot(HEAD)` を読むので、同じスタックの capability が返る。
+
+### 実測（Forge 47.4.28 / CAR 1.20.1-v1a / ManaitaMTK 1.7.4、HEAD 実装備は空・インベントリにも
+まな板ヘルメット無し）
+
+| 試験 | 結果 |
+|---|---|
+| `/damage @p 20 minecraft:fall`（bypasses_armor） | 0 ダメージ（Health 200 のまま） |
+| `/damage @p 20 minecraft:mob_attack` | 0 |
+| `/damage @p 1000000 minecraft:mob_attack` | 0 |
+| `/damage @p 20 minecraft:out_of_world` | 0 |
+| `/kill @p` | 生存（チャットは `Killed TestPlayer`、Health 200、死亡画面なし） |
+
+まな板の属性（armor 165 相当）はバニラの属性上限で armor 30 に丸められるため、
+「装甲で耐えた」のではなくイベントキャンセルで 0 になっている。`abilities.mayfly=1b`、
+`invisibility` / `night_vision` 400 tick もコスメで有効（MOD 側のコード変更は不要）。
+
+### 注意
+
+これは「相手 MOD が実装備を前提に書かれている」ぶん、コスメ枠が実装備と同等に扱われることの
+裏返し。チート系 MOD を入れた環境では、コスメ枠がその能力をそのまま得る（公開サーバーでは
+導入しないこと）。
+

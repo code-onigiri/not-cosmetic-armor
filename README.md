@@ -196,6 +196,33 @@ EPF 28 → 上限 20 の 4.0 になります。
 TiC 防具（`tconstruct:plate_chestplate`、`ArmorItem` 系）も属性ミラー・耐久ミラーが
 そのまま動き、モブ攻撃 3 回で実装備 22→28/528、コスメ 0→6/208 と同量ずつ減りました。
 
+### 他 MOD の「装備判定」との連携（まな板MTK）
+
+[ManaitaMTK](https://modrinth.com/mod/manaitamtk) 1.7.4 の「まな板のヘルメット」を**コスメ枠**に
+入れて検証しました（実装備の HEAD は空、インベントリにもまな板ヘルメットは無し）。
+
+| 試験 | 参考（まな板以外のコスメでの実測） | コスメ枠にまな板ヘルメット |
+|---|---|---|
+| `/damage @p 20 minecraft:fall`（装甲を貫通） | 7.2（FF IV 金ブーツ） | **0**（Health 200 のまま） |
+| `/damage @p 20 minecraft:mob_attack` | 12.096（装甲 15 のとき） | **0** |
+| `/damage @p 1000000 minecraft:mob_attack` | — | **0** |
+| `/damage @p 20 minecraft:out_of_world` | — | **0** |
+| `/kill @p` | — | **生存**（Health 200、死亡画面なし） |
+
+チャットには `Killed TestPlayer` と出ますが、Health は 200 のままでした。
+副作用として、まな板ヘルメットの能力（暗視・透明化・移動速度・飛行の許可）もコスメ枠で有効に
+なっています（`abilities.mayfly=1b`、`invisibility`/`night_vision` 400 tick を確認）。
+
+**なぜ効くのか**: ManaitaMTK のヘルメットは自身の `inventoryTick` で
+「HEAD スロットのアイテム（`getItemBySlot`）がまな板ヘルメットか」を見て、ItemStack の
+`IInvincible` capability を立てます。ダメージ・死はその capability を見た Forge イベント
+（`LivingAttackEvent` / `LivingHurtEvent` / `LivingDamageEvent` / `LivingDeathEvent`）で
+キャンセルされます。本 MOD は (1) コスメ枠のアイテムにも `inventoryTick` を回し、
+(2) `getItemBySlot` がコスメを返すため、この経路にそのまま乗ります。MOD 側の変更は不要でした。
+
+まな板装備の属性はバニラの上限で頭打ちになるため（armor は 30、強度も上限あり）、
+「装甲で耐える」のではなく「イベントがキャンセルされて 0 ダメージ」になっている点が重要です。
+
 ## ライセンス
 
 MIT
