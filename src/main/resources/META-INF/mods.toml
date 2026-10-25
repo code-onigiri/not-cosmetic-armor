@@ -12,22 +12,27 @@ credits="Built on Cosmetic Armor Reworked by zlainsama (lain.mods), which owns t
 logoFile="logo.png"
 displayURL="https://github.com/code-onigiri/not-cosmetic-armor"
 description='''
-Makes the cosmetic slots of Cosmetic Armor Reworked actually work.
+Makes Cosmetic Armor Reworked's
+cosmetic slots actually work.
 
-Armor attributes (armor, toughness, knockback resistance, ...) and enchantments
-(Protection, Feather Falling, Thorns, ...) from a cosmetic slot are applied on top of
-your real armor. Cosmetic items also receive item ticks, so modded armor that acts on
-tick (jetpacks, Tinkers' Construct, ...) works from a cosmetic slot, and durability
-damage is mirrored onto them.
+Armor attributes, enchantments,
+item ticks, durability mirroring
+and movement sync (jetpacks fly)
+apply from the cosmetic slot.
 
-Requires Cosmetic Armor Reworked on both client and server.
+Requires Cosmetic Armor Reworked
+on both client and server.
 
 ---
 
-Cosmetic Armor Reworked のコスメ装備を、見た目だけでなく実際に機能させます。
-コスメ枠の防具の属性（防御力・強度・ノックバック耐性など）とエンチャントを実装備に
-上乗せし、コスメ枠のアイテムにも item tick・耐久ミラー・移動の同期を行います。
-クライアントとサーバーの両方に Cosmetic Armor Reworked が必要です。
+CAR のコスメ装備を、
+見た目だけでなく実際に機能させます。
+
+属性・エンチャント・item tick・
+耐久ミラー・移動の同期が有効。
+
+クライアントとサーバーの両方に
+CAR が必要です。
 '''
 
 [[dependencies.${mod_id}]]

@@ -29,6 +29,10 @@ unzip -p build/libs/notcosmeticarmor-1.20.1-1.0.0.jar META-INF/mods.toml | head 
 unzip -l build/libs/notcosmeticarmor-1.20.1-1.0.0.jar | grep -E 'logo.png|refmap'
 ```
 
+**`mods.toml` の description は手動で折り返す。** ゲーム内の Mods 画面は説明文を折り返さず、
+はみ出した部分を切り落とす。GUI スケール 2 で 1 行に収まるのは半角 44 文字（CJK は約 26 文字）
+までなので、1 行 33 文字程度で改行しておく（現在の英文は最長 33 文字）。
+
 タグを打ってからアップロードする:
 
 ```sh
