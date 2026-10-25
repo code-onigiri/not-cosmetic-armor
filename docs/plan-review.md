@@ -398,3 +398,58 @@ L3（`getItemBySlot`）+ item tick（`CosmeticItemTicker`）が、外部 MOD の
 裏返し。チート系 MOD を入れた環境では、コスメ枠がその能力をそのまま得る（公開サーバーでは
 導入しないこと）。
 
+
+## 14. 追記（移動はクライアント権威 — jetpack は「動き」だけ別扱いだった）
+
+[Iron Jetpacks](https://modrinth.com/mod/iron-jetpacks) 7.0.9 + Cucumber 7.0.16。コスメ枠の
+jetpack は item tick（`CosmeticItemTicker` → `IForgeItem#onInventoryTick` → `onArmorTick`）で
+`JetpackItem#fly` まで到達するのに、**最初は飛ばなかった**。
+
+### 症状と原因
+
+実装備ダイヤ胸当て + コスメ枠 iron jetpack、Y=95.0 からスペースを 3.6 秒保持 → Y は
+95.93 → 96.31 → 96.09（普通のジャンプ程度）。退出後の `.cosarmor` の `Energy` は
+**789320**（800000 − `usage` 120 × 89 tick）で、サーバー側で `onArmorTick` が毎 tick
+走っていたことは確定。
+
+原因は移動の権威。`JetpackItem#fly` は `player.setDeltaMovement(...)` を呼ぶだけで
+`hurtMarked` を立てない。プレイヤーの位置はクライアント権威なので、サーバー側で書き換えた
+速度は `ClientboundSetEntityMotionPacket` で本人に送らないと、クライアントの自己予測に
+上書きされて消える。バニラの防具は速度を触らないため、これまで露見していなかった。
+
+### 修正（`CosmeticItemTicker`）
+
+1 コスメごとに `Vec3 before = player.getDeltaMovement()` を控え、`onInventoryTick` の後に
+変化していれば `player.hurtMarked = true` を立てる（変化が無い tick では立てない）。
+
+- 送信経路: `ServerEntity#sendChanges`（`m_8538_`）が `hurtMarked` を見て、トラッカー全員
+  **+ 本人の connection** に `ClientboundSetEntityMotionPacket` を送る
+  （`net/minecraft/server/level/ServerEntity.java:297-302`）。ChunkMap から毎 tick 呼ばれる。
+
+### 実測（survival、スペース保持、F3 の Y を 2.3〜2.8 秒間隔で 2 点サンプル）
+
+| 構成 | dY/dt | blocks/tick | 理論 `speedVert` |
+|---|---|---|---|
+| コスメ iron のみ | 7.63 b/s | 0.38 | 0.41 |
+| コスメ gold のみ | 11.34 b/s | 0.57 | 0.61 |
+| 実 iron + コスメ gold | 8.15 b/s | 0.41 | 実 iron の 0.41 |
+| 実 gold + コスメ iron | 11.15 b/s | 0.56 | 実 gold の 0.61 |
+| 実 gold + コスメ gold | 12.17 b/s | 0.61 | 0.61 |
+
+スクリーンショット取得（`import`）に ~0.15 s かかるぶん、実測は理論値の約 0.93 倍に出る。
+iron : gold の比 1.49 ≒ 0.61 / 0.41 = 1.49 で、速度差も正しく出ている。
+
+### 2 個入れても 2 倍にはならない
+
+jetpack の推力は `min(motionY + accel, speedVert)` を **1 スタック**（`getEquippedJetpack` →
+`getItemBySlot`）から決めるので、実装備とコスメに 1 個ずつ入れても加算されない。さらに
+クライアントは実装備しか見えないため、両方入れると**実装備側の速度に引っ張られる**
+（上の表の 3・4 行）。サーバー側で「装備中」として動くのは常にコスメ枠の 1 個だけなので、
+2 個持ちの実利は予備・エネルギー切れ対策まで。
+
+### 注意
+
+コスメ枠のアイテムが死亡時にドロップするのは CAR の仕様（`ModConfigs.CosArmorKeepThroughDeath`
+が false のとき、`InventoryManager#handlePlayerDrops` が `.cosarmor` を空にして
+`ItemEntity` を湧かせる）。本 MOD は CAR のインベントリを書き換えないため、この挙動は
+バニラの防具と同じ。

@@ -2,6 +2,7 @@ package dev.codeonigiri.notcosmeticarmor.core;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Ticks cosmetic stacks like worn armor.
@@ -11,6 +12,12 @@ import net.minecraft.world.item.ItemStack;
  * Forge's {@code IForgeItem#onInventoryTick} accepts a global slot index, and passing
  * {@code items.size() + armorIndex} makes it take the armor branch, including the Forge
  * {@code onArmorTick} hook.
+ *
+ * <p>Moving items (jetpacks, propulsion, ...) call {@code setDeltaMovement} from their tick. For worn
+ * armor the client predicts that movement itself, but a cosmetic stack only exists on the server, so
+ * the change has to be shipped to its owner explicitly. Marking the player as hurt makes
+ * {@code ServerEntity} send a {@code ClientboundSetEntityMotionPacket} to the owner as well (see
+ * {@code ServerEntity#broadcastAndSend}), which applies the motion on the client.
  */
 public final class CosmeticItemTicker {
     private CosmeticItemTicker() {
@@ -23,7 +30,11 @@ public final class CosmeticItemTicker {
             if (cosmetic.isEmpty()) {
                 continue;
             }
+            Vec3 before = player.getDeltaMovement();
             cosmetic.getItem().onInventoryTick(cosmetic, player.level(), player, armorBase + i, -1);
+            if (!player.getDeltaMovement().equals(before)) {
+                player.hurtMarked = true;
+            }
         }
     }
 }
