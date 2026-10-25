@@ -19,6 +19,7 @@ Minecraft 1.20.1 / Forge 47.4.28 の MOD（Cosmetic Armor Reworked のアドオ�
 
 - ProjectE の飛翔 / Step Assist → `PlayerHelper#checkArmorHotbarCurios` が `Inventory#armor` を直読み
 - AdvancedAE の水中呼吸 → `AAELivingEntityEvents#breath` が `getItemBySlot` を読む（= こちらの経路に乗る）
+- Sophisticated Backpacks のバックパック探索 → `PlayerInventoryProvider` の `"armor"` ハンドラが `player.getInventory().armor.get(...)` を直読み。ただし 3 経路（開くキー・背中の描画・メニュー生成）が `PlayerInventoryHandler#getStackInSlot` の 1 点に集約されていたので、注入は 1 箇所で済んだ
 - ManaitaMTK の無敵 → ヘルメットの `inventoryTick` が `getItemBySlot` を見て capability を立てる
 - バニラのダメージ軽減 → `LivingEntity` が `getArmorSlots`（`m_6168_`）のリストを回す
 
@@ -76,8 +77,9 @@ timeout 1800 nix develop --command xvfb-run -n 98 -s "-screen 0 1280x720x24" \
   のコピー）。自前 jar は `/tmp/nca-test/mods/` にコピーしてから起動する。
 - 画面遷移（DISPLAY=:98、1280x720）: シングルプレイ (640,356) → ワールド (500,264) →
   「選択したワールドで遊ぶ」(478,513)。ポーズ「ゲームに戻る」は (640,262)。
-- スクショ: `DISPLAY=:98 /nix/store/8v793n92zi6apwmazy23gqhc8raszg6p-imagemagick-7.1.2-34/bin/import -window root out.png`
-- xdotool: `/nix/store/hb8zd1rp98jychmdvl7iinr76mkdbsis-xdotool-4.20260303.1/bin/xdotool`
+- スクショ / xdotool は **nix store のパスを直書きしない**（GC で消える。実際に消えた）。
+  ヘルパー `/tmp/nca-test/act.sh` が `ls -d /nix/store/*imagemagick*/bin/import | head -1` のように glob で解決する:
+  `act.sh shot out.png` / `act.sh chatt '/command'`（GUI が無い前提）/ `act.sh chat '/command'`（Escape ×2 で閉じてから）/ `act.sh key b` / `act.sh click 640 356`
 
 ### R7. 落ちたらログの探し場所を決める
 
@@ -105,6 +107,12 @@ MOD が装備を判定する経路は 1 つではない。コスメ機能を入�
 コスメの装備がどの層にも現れずセット判定が落ちる（実測: `is4=false shield[level=0]`）。
 **query の意味を変えたら、その query を読んでいる互換パッチを全部洗う**こと。
 
+2 層目（`Inventory#armor`）を直読みする MOD は、この 4 層のどこにも乗らないので個別パッチが要る
+（ProjectE の飛翔 / Step Assist、SB のバックパック）。パッチを書く前に、**その MOD の読み取りが
+1 メソッドに集約されているか**を必ず確認する。SB は `PlayerInventoryHandler#getStackInSlot` に
+集約されていたので 1 箇所で 3 経路ぶん直ったが、集約されていなければ差し込みが増えて保守できない
+（その場合は「制約」として docs に書くほうが安い）。
+
 ### R8. 終わったら docs に残す
 
 - 時系列の知見は `docs/plan-review.md` に § を足す（現象 → 原因 → 修正 → 実測 → 残る制約）。
@@ -126,6 +134,9 @@ MOD が装備を判定する経路は 1 つではない。コスメ機能を入�
 | コスメが無い状態だけで「動く」と確認して終えた | コスメを 1 枚載せた瞬間に実装備のセット能力が消える不具合を見逃した | コスメあり/なし × 実装備あり/なしの 2×2 を測る |
 | `/data get` の `abilities.mayfly` が 1b だけで「飛べる」と判断 | サーバーだけ true でクライアントは false。実際には飛べなかった | 能力はサーバー値と実挙動（Y の変化）を両方見る |
 | テレポート直後にダブルタップを送った | チャット欄が 1 回目の押下を吸い、飛ばないと誤読 | 送信後 1 秒待ち、クリックでフォーカスを戻してから押す |
+| GUI を開いたまま `Escape` ×2 のチャット送信ヘルパーを使った | 1 回目で GUI が閉じ、2 回目でポーズメニューが開き、最後の Return が「セーブしてタイトルへ戻る」を押してワールドから退出した | GUI を閉じるときは Escape 1 回。コマンドは GUI が無い状態で送る（`t` だけのヘルパーを分ける） |
+| `/data modify entity @p SelectedItem.tag...` で手に持った装備の NBT を書いた | 「変更しました」と出るのに反映されない（`SelectedItem` は読み取り専用） | `Inventory[{Slot:0b}]`（ホットバー 1）に対して書く |
+| `/item replace ... with <id>{NBT}` で複雑な NBT を渡した | チャットに「「}」が必要です」。パースに失敗する | 素のアイテムを入れてから `/data modify` で NBT を足す |
 | `RealPriority` で query の意味を変えたのに、それを読む互換パッチを数えなかった | `ArmorSetUnion` が 3 層前提で、実装備メカスーツが勝った瞬間にコスメの夢幻終焉がどの層にも出ずセットが消えた | 層を増やす/意味を変えるときは、その query の読み手を全部 grep する |
 
 ## 検証ハーネス
@@ -158,6 +169,11 @@ python3 /tmp/cae/mkcos.py '{"0":{"id":"minecraft:golden_boots","enchant":[[2,4]]
 
 CAR のインベントリ経由で書くので同期・保存も通常の編集と同じ。`.cosarmor` を直接書き換える方法は
 **ワールドを閉じているときしか使えない**（開いている間の変更は退出時に上書きされる）。
+
+### NBT 付きの装備をコスメ枠に入れる
+
+`/notcosmeticarmor cosmetic <slot> hand` はメインハンドのスタックを NBT ごとコピーする。
+アフィックス・注入呪文・アップグレードオーブ・モジュール付き装備はこれで入れる（アイテム id 指定では NBT が落ちる）。
 
 ### 状態確認
 

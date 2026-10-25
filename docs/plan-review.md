@@ -819,3 +819,138 @@ union の 2 層（`getItemBySlot` と `Inventory#armor`）が両方コスメに�
 - 対象 MOD が装着判定を `Inventory#armor` の直読みに変えたら、`RealPriority` では追従できない
   （そのときは ProjectE と同様の個別パッチが要る）。
 
+
+
+## 20. コスメ枠のバックパックが開かなかった（1.6.0）
+
+### 現象
+
+ユーザー報告（m05967、原文の該当部分）: "sophisticated backpackのバックパックを開くキーが効きません"
+
+コスメ枠（CAR のサブ装備）にバックパックを入れて B キーを押しても、何も開かない。
+キー自体は死んでいない（実装備のバックパックなら開く）ので、探索側の問題だと見当がつく。
+
+### 原因: armor ハンドラが `Inventory#armor` を直読みしていた
+
+`/tmp/sbp`（sophisticatedbackpacks 3.26.14.2226）/ `/tmp/sbc`（sophisticatedcore 1.5.15.2427）を
+vineflower で展開して追った経路:
+
+- `client/KeybindHandler.java`: 既定キーは B。クライアント側では装備の有無を一切見ず、
+  `BackpackOpenMessage` をサーバーへ送るだけ。**キー入力は届いている**。
+- `network/BackpackOpenMessage.java#handleMessage`: 開いているコンテナがバックパックでなければ
+  `PlayerInventoryProvider.get().runOnBackpacks(...)` で最初のバックパックを探す。
+- `util/PlayerInventoryProvider.java`: ハンドラは main / offhand / armor の 3 つ。armor は
+  `(player, identifier, slot) -> (ItemStack)player.m_150109_().f_35975_.get(EquipmentSlot.CHEST.m_20749_())`
+  = **`Inventory#armor` の生リスト直読み**。`getItemBySlot` を通らない。
+- `util/PlayerInventoryHandler.java:38-40` `getStackInSlot` は `SlotStackGetter` を呼ぶだけ。
+
+つまり R7.5 の 2 層目を読むタイプで、我々の 1 層目（`getItemBySlot`）の上書きでは見えない。
+
+### 合流点は 1 つだった
+
+`getStackInSlot` の呼び出し元は 3 箇所だけ:
+
+- `PlayerInventoryProvider#runOnBackpacks`（:129、開くキーと「バックパックを開く」ボタン）
+- `PlayerInventoryProvider#getBackpackFromRendered`（:96、背中の描画）
+- `BackpackContext.Item#getBackpackWrapper`（`BackpackContext.java:738`、メニュー生成時のラッパ）
+
+3 経路とも同じメソッドを通るので、**注入は 1 箇所で済む**。
+`BackpackContext.Item` は handlerName / identifier / backpackSlotIndex / openFromInventory の 4 つを
+バッファに書くだけなので、ラッパ側がコスメを返せば GUI の中身も正しく引ける。
+
+### 修正
+
+`compat/sophisticatedbackpacks/PlayerInventoryHandlerMixin.java`
+（`@Pseudo @Mixin(targets = "net.p3pp3rf1y.sophisticatedbackpacks.util.PlayerInventoryHandler", remap = false)`）:
+
+- `@Inject(method = "getStackInSlot", at = @At("RETURN"), cancellable = true, require = 0, remap = false)`
+- 条件は 3 つ: (a) `this` が armor ハンドラ、(b) 戻り値がバックパックでない、(c) コスメ胸（CAR slot 2）がバックパック。
+  3 つ揃ったときだけコスメを返す。**実装備のバックパックが常に優先**。
+- 名前空間判定は `BuiltInRegistries.ITEM.getKey(item).getNamespace().equals("sophisticatedbackpacks")`。
+
+**このプロジェクトは対象 MOD を compile 依存にしない**（ProjectE / EndingLib と同じ作法）。
+最初の版は `PlayerInventoryProvider` を import してハンドラ同一性を比較しようとして
+「パッケージ net.p3pp3rf1y.sophisticatedbackpacks.util は存在しません」で落ちた。
+現在は `Class.forName` → `getMethod("get").invoke(null)` → `getPlayerInventoryHandler("armor")` を
+リフレクションで解決して static volatile にキャッシュし、mixin 側は
+`SophisticatedBackpacksCompat.isArmorHandler(this)` を呼ぶだけにしてある。
+`SophisticatedBackpacksMixinPlugin` が対象クラスの有無を `ClassLoader#getResource` で確認し、
+無ければ config を読まない（対象 MOD 抜きでも起動する）。
+
+### 実測（実機、run28）
+
+| 操作 | 結果 |
+|---|---|
+| コスメ胸 = 革のバックパック → B | 「革のリュック」GUI が開く。shift+クリックで剣を収納、閉じて再度 B でも残る。`calls=1273 hits=1219` |
+| 実装備胸 = ダイヤのリュック（コスメは革のまま）→ B | 「ダイヤモンドのリュック」が開く。`calls=1358→1369` で `hits` は 1233 のまま = 実装備優先 |
+| 三人称（F5） | コスメの革バックパックが背中に描画される |
+
+画像: `docs/img/sb-cosmetic-gui.png` / `docs/img/sb-real-wins.png` / `docs/img/sb-back-render.png`
+
+### 罠
+
+- GUI を開いたまま Escape ×2 のチャット送信ヘルパーを使うと、1 回目で GUI、2 回目でポーズメニューが開き、
+  最後の Return が「セーブしてタイトルへ戻る」を押してワールドから退出する。GUI を閉じるのは Escape 1 回。
+- `calls` はハンドラが呼ばれた回数、`hits` はコスメを返した回数。**実装備があるときは calls だけ増える**のが正しい。
+
+### 残る制約
+
+- SB が `getStackInSlot` の名前やシグネチャを変えたら、`require = 0` のため静かに無効化される。
+  `status` の `calls` が増えないことで気づける。
+- コスメ枠のバックパックを**もう 1 人から開かれる**状況（`accessibleByAnotherPlayer`）は未検証。
+
+
+## 21. アフィックスと呪文オーブの属性は元から乗っていた（1.6.0）
+
+### 問い
+
+Apotheosis のアフィックス付き装備、Iron's Spellbooks の注入呪文 / アップグレードオーブ付き装備を
+コスメ枠に入れたとき、属性は付くのか。付かないなら MOD ごとのパッチが要る。
+
+### 結論: パッチ不要。経路が 1 本に揃っている
+
+Forge の `patches/net/minecraft/world/item/ItemStack.java.patch` で、
+`m_41639_()`（`getAttributeModifiers`）は
+`multimap = this.m_41720_().getAttributeModifiers(p_41639_, this);` の後に
+`multimap = net.minecraftforge.common.ForgeHooks.getAttributeModifiers(this, p_41639_, multimap);`
+を呼ぶ。つまり **ItemStack 経由なら必ず `ItemAttributeModifierEvent` が発火する**。
+我々の `AttributeMirror` は `cosmetic.getAttributeModifiers(equipmentSlot)`（ItemStack 版）を呼ぶので、
+ここに乗っている MOD の動的属性は自動で拾える。
+
+- Apotheosis `adventure/AdventureEvents.java:85-93` `affixModifiers(ItemAttributeModifierEvent e)`:
+  `SocketHelper.getGems(stack).addModifiers(...)` と `AffixHelper.getAffixes(stack).forEach((afx, inst) -> inst.addModifiers(e.getSlotType(), e::addModifier))`。
+- Iron's Spellbooks `player/ServerPlayerEvents.java:291` `handleUpgradeModifiers`:
+  `UpgradeData.getUpgradeData(event.getItemStack())` が `getUpgradedSlot()` と一致するとき
+  `UpgradeUtils.handleAttributeEvent(...)` が `new AttributeModifier(uuid, "upgrade", base + type.amount() * count, operation)` を積む。
+  uuid は `UPGRADE_UUIDS_BY_SLOT` の**固定 UUID**（CHEST = 8d02c916-b0eb-4d17-8414-329b4bd38ae7）なので
+  実装備とコスメで同じスロットに両方入れると衝突しうるが、我々の UUID リマップで回避している。
+
+`grep -rln 'f_35975_' /tmp/apo /tmp/isb` は 0 件（`Inventory#armor` の直読みが無い）ことも確認した。
+
+### 実測（実機、run28）
+
+- Apotheosis: `diamond_chestplate` に `/apoth lootify apotheosis:mythic` → `cosmetic chest hand`。
+  表示名「絶え間ない 祝福された 強化する ドワーフの 魔力が集まる 丈夫な重力のダイヤモンドのチェストプレート」、
+  `modifiers=6 fromItem=6`。コスメ有り / 無しで 防御力 78.0 / 70.0、防具強度 44.0 / 42.0、
+  最大体力 248.05 / 237.80、`irons_spellbooks:spell_power` 1.70 / 1.60。
+- Iron's Spellbooks: `irons_spellbooks:upgrade_data = {slot:"chest", upgrades:{"irons_spellbooks:fire_power":2}}`
+  を NBT で入れたダイヤ胸当て → `irons_spellbooks:fire_spell_power` 1.0 → 1.1、`modifiers=3 fromItem=3`。
+
+`fromItem=` を出したのは切り分けのため。「アイテム側に属性が無い」のか「ミラーに失敗している」のかを、
+1 回の `/notcosmeticarmor status` で判別できる。
+
+### NBT 付き装備の投入手順（実測で確定）
+
+1. `/item replace entity @p hotbar.0 with minecraft:diamond_chestplate`（`weapon.mainhand` はメインハンドが埋まっていると入らない）
+2. `/data modify entity @p Inventory[{Slot:0b}].tag."irons_spellbooks:upgrade_data" set value {...}`
+3. `/data get entity @p Inventory[{Slot:0b}]` で確認 → `key 1` で持ち替え → `/notcosmeticarmor cosmetic chest hand`
+
+`/item replace ... with <id>{NBT}` は複雑な NBT でパースに失敗する（「}」が必要です）。
+`/data modify entity @p SelectedItem...` は「変更しました」と出るのに反映されない（読み取り専用）。
+
+### 残る制約
+
+- 属性にならない**挙動系アフィックス**（onHurt など）は未検証。属性イベントに乗らないものは
+  アイテムの tick / イベント側の話になるので、別途ソースを読む必要がある。
+- Iron's Spellbooks の**注入呪文の発動**は未検証。`SpellSelectionManager.java:53-58` が
+  `player.m_6844_(...)` で装備を読むため呪文の選択肢には出るが、詠唱して効果が出るかは実機で見ていない。

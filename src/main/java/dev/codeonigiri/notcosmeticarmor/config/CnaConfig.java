@@ -15,6 +15,7 @@ public final class CnaConfig {
     public static final ForgeConfigSpec.BooleanValue COSMETIC_DURABILITY;
     public static final ForgeConfigSpec.BooleanValue IGNORE_SKIN_FLAG;
     public static final ForgeConfigSpec.BooleanValue PATCH_PROJECT_E;
+    public static final ForgeConfigSpec.BooleanValue PATCH_SOPHISTICATED_BACKPACKS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> REAL_PRIORITY_NAMESPACES;
 
     static {
@@ -65,9 +66,14 @@ public final class CnaConfig {
                 "patchProjectE: let ProjectE's gem armor provide flight, step assist and the offensive",
                 "  abilities (chest explosion, helmet zap) from the cosmetic slots. ProjectE reads",
                 "  Inventory#armor directly, which no other layer of this mod touches, so without the",
-                "  patch only the passive effects (auto feeding, damage reduction, ...) work."
+                "  patch only the passive effects (auto feeding, damage reduction, ...) work.",
+                "patchSophisticatedBackpacks: let a backpack worn in the cosmetic chest slot be found and",
+                "  opened. Sophisticated Backpacks searches its own inventory handlers and the armor handler",
+                "  reads Inventory#armor directly, so the open key found nothing and silently did nothing.",
+                "  A real backpack in the chest slot still takes precedence."
         ).push("compat");
         PATCH_PROJECT_E = builder.define("patchProjectE", true);
+        PATCH_SOPHISTICATED_BACKPACKS = builder.define("patchSophisticatedBackpacks", true);
         builder.pop();
 
         SPEC = builder.build();
@@ -106,6 +112,10 @@ public final class CnaConfig {
 
     public static boolean projectECompat() {
         return !SPEC.isLoaded() || PATCH_PROJECT_E.get();
+    }
+
+    public static boolean sophisticatedBackpacksCompat() {
+        return !SPEC.isLoaded() || PATCH_SOPHISTICATED_BACKPACKS.get();
     }
 
     public static List<? extends String> realPriorityNamespaces() {

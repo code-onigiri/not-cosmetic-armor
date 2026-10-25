@@ -3,6 +3,7 @@ package dev.codeonigiri.notcosmeticarmor.command;
 import dev.codeonigiri.notcosmeticarmor.car.CarBridge;
 import dev.codeonigiri.notcosmeticarmor.compat.endinglib.EndingLibCompat;
 import dev.codeonigiri.notcosmeticarmor.compat.projecte.ProjectECompat;
+import dev.codeonigiri.notcosmeticarmor.compat.sophisticatedbackpacks.SophisticatedBackpacksCompat;
 import dev.codeonigiri.notcosmeticarmor.config.CnaConfig;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticSlots;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
@@ -31,6 +32,10 @@ import net.minecraftforge.event.RegisterCommandsEvent;
  * test item in a cosmetic slot. Writing through CAR's inventory means the change is synced and saved
  * like a normal cosmetic edit, which makes it possible to test several armor combinations without
  * leaving the world (editing {@code .cosarmor} by hand only works while the world is closed).
+ * <p>
+ * {@code cosmetic <slot> hand} copies the stack from the main hand (NBT included), which is the only
+ * way to test items whose behaviour lives in their NBT: Apotheosis affixes, Iron's Spellbooks upgrade
+ * orbs, Mekanism modules, and so on.
  */
 public final class CnaCommand {
     private CnaCommand() {
@@ -80,6 +85,10 @@ public final class CnaCommand {
                     .append(" calls=").append(ProjectECompat.CALLS.get())
                     .append(" hits=").append(ProjectECompat.HITS.get())
                     .append('\n');
+            out.append("  sophisticatedBackpacks: patch=").append(CnaConfig.sophisticatedBackpacksCompat())
+                    .append(" calls=").append(SophisticatedBackpacksCompat.CALLS.get())
+                    .append(" hits=").append(SophisticatedBackpacksCompat.HITS.get())
+                    .append('\n');
             AttributeInstance step = player.getAttribute(ForgeMod.STEP_HEIGHT_ADDITION.get());
             out.append("  stepHeight=").append(step == null ? "n/a" : step.getValue());
             if (step != null) {
@@ -98,6 +107,8 @@ public final class CnaCommand {
                         .append(": real=").append(name(real))
                         .append(" cosmetic=").append(name(cosmetic))
                         .append(" modifiers=").append(applied)
+                        .append(" fromItem=").append(cosmetic.isEmpty() ? 0
+                                : cosmetic.getAttributeModifiers(CosmeticSlots.byIndex(i)).size())
                         .append(" query=").append(RealPriority.prefersReal(real, cosmetic) ? "real" : "cosmetic")
                         .append('\n');
             }
@@ -126,7 +137,13 @@ public final class CnaCommand {
         }
         ItemStack stack = ItemStack.EMPTY;
         String trimmed = itemName.trim();
-        if (!trimmed.equals("none") && !trimmed.equals("air")) {
+        if (trimmed.equals("hand")) {
+            stack = player.getMainHandItem().copyWithCount(1);
+            if (stack.isEmpty()) {
+                source.sendFailure(Component.literal("the main hand is empty"));
+                return 0;
+            }
+        } else if (!trimmed.equals("none") && !trimmed.equals("air")) {
             ResourceLocation id = ResourceLocation.tryParse(trimmed);
             if (id == null) {
                 source.sendFailure(Component.literal("not an item id: " + trimmed));
@@ -186,6 +203,9 @@ public final class CnaCommand {
         String base = stack.getHoverName().getString() + " x" + stack.getCount();
         if (stack.isDamageableItem()) {
             base += " dmg=" + stack.getDamageValue() + "/" + stack.getMaxDamage();
+        }
+        if (stack.hasTag()) {
+            base += " nbt=" + stack.getTag().getAllKeys();
         }
         return base;
     }

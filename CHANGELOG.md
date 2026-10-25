@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.6.0 — 2026-10-26
+
+### 修正
+
+- **コスメ枠のバックパックが開かなかった**（Sophisticated Backpacks）。
+  `PlayerInventoryProvider` の `"armor"` ハンドラが `player.getInventory().armor.get(EquipmentSlot.CHEST.getIndex())`
+  を直読みするため、コスメ胸のバックパックは探索で見つからず、B キーが無反応でした。
+  開くキー・背中の描画・メニュー生成の 3 経路が集まる `PlayerInventoryHandler#getStackInSlot` に注入し、
+  armor ハンドラの戻り値がバックパックでないときだけコスメ胸を返すようにしました。
+  実装備のバックパックがあるときは従来どおり実装備が優先です（`compat.patchSophisticatedBackpacks=false` で無効化）。
+
+### 追加
+
+- `/notcosmeticarmor cosmetic <slot> hand`: メインハンドのスタックを **NBT ごと**コピーします。
+  アフィックス・注入呪文・アップグレードオーブ・メカスーツのモジュールは NBT に振る舞いがあるため、
+  アイテム id だけの指定では落ちます。
+- `/notcosmeticarmor status` のスロット行に `fromItem=`（アイテム側の属性数）と `nbt=`（NBT キー）を追加。
+  属性が出ないときに「アイテム側に無い」のか「ミラーに失敗している」のかを切り分けられます。
+- `/notcosmeticarmor status` に `sophisticatedBackpacks: patch=.. calls=.. hits=..` を追加。
+- 設定 `compat.patchSophisticatedBackpacks`（既定 `true`）。
+
+### 検証済み（実機、1.6.0）
+
+| 構成 | 結果 |
+|---|---|
+| コスメ胸 = 革のバックパック | B キーで「革のリュック」が開く。shift+クリックで収納でき、閉じて再度 B でも中身が残る。三人称で背中に描画。`calls=1273 hits=1219` |
+| 実装備胸 = ダイヤのリュック / コスメ胸 = 革のバックパック | B キーで「ダイヤモンドのリュック」が開く（実装備優先）。`calls=1358→1369` に対し `hits` は 1233 のまま |
+| Apotheosis `mythic` アフィックスのダイヤ胸当て | `modifiers=6 fromItem=6`。コスメ無しと比べて 防御力 70.0 → 78.0、防具強度 42.0 → 44.0、最大体力 237.80 → 248.05、`irons_spellbooks:spell_power` 1.60 → 1.70 |
+| Iron's Spellbooks の `fire_power` 2 個入りダイヤ胸当て | `irons_spellbooks:fire_spell_power` 1.0 → 1.1（0.05 × 2 MULTIPLY_BASE）、`modifiers=3 fromItem=3` |
+
+アフィックスとオーブの属性は `ItemStack#getAttributeModifiers` → `ForgeHooks.getAttributeModifiers` →
+`ItemAttributeModifierEvent` の経路で供給されるため、コスメ枠でも属性ミラーにそのまま乗ります。
+Sophisticated Backpacks 側の前提: パッチは `PlayerInventoryHandler` の内部に `@Pseudo` で入り、
+対象クラスが無ければ mixin config 自体を読みません。
 ## 1.5.0 — 2026-10-25
 
 ### 修正

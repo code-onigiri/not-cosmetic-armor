@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "dev.codeonigiri.notcosmeticarmor.compat.sophisticatedbackpacks.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "notcosmeticarmor.refmap.json",
+  "plugin": "dev.codeonigiri.notcosmeticarmor.compat.sophisticatedbackpacks.SophisticatedBackpacksMixinPlugin",
+  "mixins": [
+    "PlayerInventoryHandlerMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

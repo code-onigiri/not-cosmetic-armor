@@ -52,7 +52,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 - **耐久**: 実装備が耐久ダメージを受けたとき、同じスロットのコスメ装備にも**同じ量**のダメージが入ります（4 分の 1 丸め・最低 1 のバニラ規則、Unbreaking、壊れたら消える挙動まで同じ）。`/notcosmeticarmor status` の `dmg=` で両方の耐久値を確認できます。
 - **セット判定（fantasy_ending / EndingLib）**: 4 点セットの判定を「実装備とコスメ枠の合算」に広げます。コスメ枠に別の防具を載せても、実装備の夢幻終焉 4 点セットは消えません（逆に、実装備 2 点 + コスメ 2 点でも 4 セットになります）。判定は EndingLib の `ArmorUtils#getArmorSet` 1 メソッドだけを上書きするので、他の MOD の判定には影響しません。
 - **実装備優先（`behavior.realPriorityNamespaces`）**: Mekanism のように「メカスーツを着ている前提」で能力を判定する MOD では、コスメ枠に別の防具があるとメカスーツの効果（Step Assist・重力変調・静水学的反発ユニットなど）が止まります。そこで、既定で `mekanism` 名前空間の装備だけ、**同じスロットに実装備があれば実装備を返す**ようにしています。tick 窓でもそのスロットの実装備は退避しないので、半 tick おきに能力が消えることはありません。コスメ枠が空、または実装備がその MOD の装備でなければ従来どおりコスメが優先されます（一覧は設定で増減できます）。
-- **相性の悪い MOD への小さなパッチ（同梱）**: `Inventory#armor` を直接読む MOD は、上の 4 層では拾えません。そういう MOD に限り、その MOD の判定メソッド 1 つにだけ注入して「実装備で見つからなければコスメ枠も見る」と広げます。対象 MOD が入っていなければ何も適用されません（現在は ProjectE。下記の[互換性](#互換性実機で確認した-mod)）。
+- **相性の悪い MOD への小さなパッチ（同梱）**: `Inventory#armor` を直接読む MOD は、上の 4 層では拾えません。そういう MOD に限り、その MOD の判定メソッド 1 つにだけ注入して「実装備で見つからなければコスメ枠も見る」と広げます。対象 MOD が入っていなければ何も適用されません（現在は ProjectE と Sophisticated Backpacks。下記の[互換性](#互換性実機で確認した-mod)）。
 
 ## 何が機能しないか（意図的）
 
@@ -74,11 +74,14 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減・**飛翔・Step Assist** がコスメ枠で動く（互換パッチ同梱） |
 | [Mekanism](https://modrinth.com/mod/mekanism) | 10.4.16.80 | 実装備のメカスーツの効果（Step Assist・重力変調・静水学的反発・スキューバ）が動く。コスメ枠に夢幻終焉を着けてもメカスーツの判定は消えない（`behavior.realPriorityNamespaces`） |
 | fantasy_ending（要 EndingLib） | 2.7.20 / 2.2.1fix | 夢幻終焉 4 点のセット効果（128 以下のダメージ無効化・シールド・死亡時復帰・効果無効）が動く。**実装備とコスメ枠の合算で判定**するので、実装備のセットがコスメに隠れない |
+| [Sophisticated Backpacks](https://modrinth.com/mod/sophisticated-backpacks) + Sophisticated Core | 3.26.14.2226 / 1.5.15.2427 | コスメ枠（胸）のバックパックが **B キーで開き、中身を出し入れでき、背中に描画される**。同じスロットに実装備のバックパックがあればそちらが優先（互換パッチ同梱） |
+| [Apotheosis](https://modrinth.com/mod/apotheosis) + Placebo + Apothic Attributes | 7.4.8 / 8.6.3 / 1.3.7 | コスメ枠の装備の**アフィックス属性**（最大体力・防御力・防具強度・呪文威力など）が実装備の上に加算される |
+| [Iron's Spellbooks](https://modrinth.com/mod/irons-spellbooks) | 3.16.3 | コスメ枠の装備の**アップグレードオーブ属性**（`irons_spellbooks:upgrade_data`）が加算される。装備に注入した呪文（`spell_container`）も `getItemBySlot` 経由で見える（呪文の発動自体は実機未検証） |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
 独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
 結果が変わります（[仕組み](#仕組み)）。`Inventory#armor` を直接読む MOD は、
-そのリスト自体を書き換えない限りコスメ装備を見ません（ProjectE だけは同梱のパッチで対応しています）。
+そのリスト自体を書き換えない限りコスメ装備を見ません（ProjectE と Sophisticated Backpacks は同梱のパッチで対応しています）。
 
 ### コスメ枠では効かないもの（MOD 側の実装都合）
 
@@ -106,6 +109,27 @@ ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`I
 - `/notcosmeticarmor status` の `projectE: patch=... calls=... hits=...` で、呼ばれた回数と
   一致した回数が分かります（`calls` が増え続け `hits` が 0 なら、コスメ防具が条件を満たしていません）。
 
+### Sophisticated Backpacks の互換パッチ
+
+バックパックは「胸スロットに着ける装備」ですが、SB は装着の判定を
+`PlayerInventoryProvider` の
+`"armor"` ハンドラで
+`player.getInventory().armor.get(EquipmentSlot.CHEST.getIndex())`（＝インベントリの生リスト）から
+直接読んでいます。そのためコスメ枠のバックパックは、開くキー（既定 B）を押しても見つからず、
+無反応でした（描画もされません）。
+
+`PlayerInventoryHandler#getStackInSlot` は
+`runOnBackpacks`（キー・ボタン）、
+`getBackpackFromRendered`（背中の描画）、
+`BackpackContext$Item#getBackpackWrapper`（メニューの生成）の**3 経路すべてが通る 1 点**なので、
+ここだけを差し替えています（`require = 0` なので、SB 側の実装が変わって注入点が消えても起動は壊れません）。
+
+- 実装備の胸にバックパックがある場合は**実装備を優先**します（コスメのバックパックは開きません）。
+- 対象クラスが無い環境では mixin config を読み込みません（`SophisticatedBackpacksMixinPlugin`）。
+- 無効にしたいときは `config/notcosmeticarmor-server.toml` の `compat.patchSophisticatedBackpacks=false`。
+- `/notcosmeticarmor status` の `sophisticatedBackpacks: patch=... calls=... hits=...` で、
+  呼ばれた回数とコスメ側を返した回数が分かります（実装備のバックパックがある間は `calls` だけが増えます）。
+
 ### 本 MOD が原因ではない起動クラッシュ（実機で切り分け済み）
 
 - **Re-Avaritia 1.4.2 + irons_lib 2.2.0**: 両者が `LocalPlayerMixin` の同じメソッドに
@@ -130,13 +154,14 @@ ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`I
 | `behavior.ignoreSkinArmorFlag` | true | CAR の「skin armor」フラグが立ったスロットも機能させる |
 | `behavior.realPriorityNamespaces` | `["mekanism"]` | この名前空間の装備は、同じスロットに実装備があれば実装備を優先する（MekaSuit 用）。カンマ区切りのリスト |
 | `compat.patchProjectE` | true | ProjectE の飛翔・Step Assist 判定にコスメ枠を足す（ProjectE 導入時のみ意味を持つ） |
+| `compat.patchSophisticatedBackpacks` | true | Sophisticated Backpacks のバックパック探索にコスメ枠を足す（SB 導入時のみ意味を持つ） |
 
 ## コマンド
 
 ```
 /notcosmeticarmor status   # 状態表示
 /notcosmeticarmor probe    # tick 窓の内外で getItemBySlot が何を返すかをログに出す（デバッグ）
-/notcosmeticarmor cosmetic <feet|legs|chest|head> <item id|none>   # コスメ枠に直接入れる（検証用）
+/notcosmeticarmor cosmetic <feet|legs|chest|head> <item id|none|hand>   # コスメ枠に直接入れる（検証用）
 ```
 
 権限レベル 2 以上。`status` は CAR の検出状況、実効モード（OFF / ATTRIBUTE / PRIORITY / INTERLEAVE）、
@@ -144,6 +169,9 @@ ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`I
 状態を表示します。`cosmetic` はワールドを出ずにコスメ枠の組み合わせを変えるためのコマンドです
 （`/notcosmeticarmor cosmetic chest fantasy_ending:fantasy_ending_chestplate` のように使います。
 CAR のインベントリ経由で書くので、通常の編集と同じように同期・保存されます）。
+アイテムを手に持っている場合は `hand` を渡すと、**NBT ごと**コピーしてコスメ枠に入ります
+（Apotheosis のアフィックス、Iron's Spellbooks の注入呪文やアップグレードオーブ、Mekanism の
+モジュールのように、振る舞いが NBT にある装備を試すための近道です）。
 `probe` を有効にすると、数秒おきに次のようなログが出ます:
 
 ```
@@ -460,6 +488,45 @@ fantasy_ending の装備判定（`ArmorUtils#getArmorSet`）は `getItemBySlot` 
 重力変調は 1000 J/tick、静水学的反発は 500 J/tick を消費します（既定値）。
 
 ![mekanism + fantasy](docs/img/mekanism-fantasy.png)
+### コスメ枠のバックパック・アフィックス・呪文オーブ（実機、1.6.0）
+
+実インスタンスのコピー（Forge 47.4.28、Mekanism のメカスーツ 4 点を実装備、夢幻終焉 4 点を
+コスメ枠、という構成のまま）で、追加の 3 MOD を検証しました。
+
+**Sophisticated Backpacks 3.26.14.2226**:
+
+| 操作 | 結果 |
+|---|---|
+| コスメ枠（胸）に革のバックパック → B キー | 「革のリュック」が開く（`calls=1273 hits=1219`） |
+| shift+クリックで剣を収納 → 閉じて再度 B | 中身が残っている |
+| 実装備の胸にダイヤのバックパックを追加 | 開くのは**実装備**（「ダイヤモンドのリュック」）。`calls` は増えるが `hits` は 1233 のまま |
+| コスメ枠のバックパックを三人称で見る | 背中に描画される |
+
+![SB cosmetic backpack GUI](docs/img/sb-cosmetic-gui.png)
+
+**Apotheosis 7.4.8**: ダイヤのチェストプレートを `/apoth lootify apotheosis:mythic` で
+アフィックス付きにしてコスメ枠へ（`/notcosmeticarmor cosmetic chest hand`）。
+
+| 属性 | コスメ有り | コスメ無し | 差 |
+|---|---|---|---|
+| 防御力 | 78.0 | 70.0 | +8（アフィックス + ダイヤ胸の基礎値） |
+| 防具強度 | 44.0 | 42.0 | +2 |
+| 最大体力 | 248.05 | 237.80 | +10.25（祝福のアフィックス） |
+| `irons_spellbooks:spell_power` | 1.70 | 1.60 | +0.10（魔力が集まるアフィックス） |
+
+**Iron's Spellbooks 3.16.3**: ダイヤのチェストプレートに
+`irons_spellbooks:upgrade_data={slot:"chest",upgrades:{"irons_spellbooks:fire_power":2}}` を入れて
+コスメ枠へ（`/item replace entity @p hotbar.0 ...` → `/data modify entity @p Inventory[{Slot:0b}]...`）。
+
+| 属性 | 結果 |
+|---|---|
+| `irons_spellbooks:fire_spell_power` | 1.0 → **1.1**（0.05 × 2、MULTIPLY_BASE） |
+| `/notcosmeticarmor status` | `modifiers=3 fromItem=3`、`nbt=[Damage, irons_spellbooks:upgrade_data]` |
+
+どちらも属性の元は Forge の `ItemAttributeModifierEvent` です。本 MOD の属性ミラーは
+`cosmetic.getAttributeModifiers(slot)` を呼ぶだけなので、このイベントに乗る MOD の動的な属性は
+そのまま拾えます（`ItemStack#getAttributeModifiers` が `ForgeHooks.getAttributeModifiers` を呼ぶため）。
+
 ## 謝辞
 
 - [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)（zlainsama / original by dmillerw）— コスメ枠のインベントリと描画。
