@@ -497,6 +497,75 @@ jetpack の推力は `min(motionY + accel, speedVert)` を **1 スタック**（
 
 - クライアント側のコスメは CAR のクライアントコピーが正であることが前提。サーバーとずれると
   1 tick だけ古い値が見えることがある（CAR の仕様）。
-- `Inventory#armor` を直接読む MOD（ProjectE のジェム飛翔など）は、tick 窓の外では
-  コスメを見ない。上書きできるのは `getItemBySlot` / `getArmorSlots` まで。
+- `Inventory#armor` を直接読む MOD は、tick 窓の外ではコスメを見ない。上書きできるのは
+  `getItemBySlot` / `getArmorSlots` まで（ProjectE のジェム飛翔は §16 の個別パッチで対応した）。
+
+
+
+## 16. 追記（`Inventory#armor` の直読みには個別パッチ — ProjectE の飛翔と Step Assist）
+
+### きっかけ
+
+実インスタンス（Forge 47.4.28 / CAR 1.20.1-v1a / 41 MOD）で、コスメ枠のジェム防具が
+「エフェクトだけ効いて飛べない・Step Assist が無い」という報告。逆コンパイルで経路を追うと、
+ProjectE の飛翔と Step Assist は `PlayerHelper#checkArmorHotbarCurios(Player, Predicate<ItemStack>)`
+が `player.getInventory().armor` を直接 stream して判定していた（`InternalAbilities#shouldPlayerFly`
+→ `GemFeet#canProvideFlight`、`shouldPlayerStep` → `GemLegs`）。§15 のクライアント対応でも
+§9〜§14 のどの層でも届かない場所で、**本 MOD が書き換えない実体**を読んでいる。
+
+### 修正 1: 判定メソッドの戻り値だけを広げる
+
+- `compat/projecte/mixin/PlayerHelperMixin`（`@Pseudo @Mixin(targets = "moze_intel.projecte.utils.PlayerHelper", remap = false)`）
+  が `checkArmorHotbarCurios` の RETURN に `require = 0` で注入する。
+- 元の戻り値が `true` なら何もしない。`false` のときだけ `ProjectECompat#anyWorn` を呼び、
+  `EquipmentSlot.Type.ARMOR` の 4 スロットを `player.getItemBySlot(slot)` で引き直して
+  `checker` に通す。**getItemBySlot 経由にするのが要点**で、`GemFeet#canProvideFlight` は
+  渡されたスタックを `player.getItemBySlot(FEET)` と参照比較するため、自前のコスメスタックを
+  直接渡すと同一性で落ちる。
+- `ProjectEMixinPlugin`（`IMixinConfigPlugin`）が `ModList.get().isLoaded("projecte")` を見て、
+  無ければ config ごと適用しない。ProjectE のクラスは一切コンパイル時参照していない。
+- 設定 `compat.patchProjectE`（既定 true）で切り分け可能。`/notcosmeticarmor status` に
+  `projectE: patch=... calls=... hits=...` を出し、呼ばれた回数と一致した回数を数える。
+
+### 修正 2: `InternalAbilities` のキャッシュがゲームモード変更で固まる
+
+パッチ 1 を入れて `calls` と `hits` が毎 tick 一致するようになっても、`abilities.mayfly` が
+`0b` のまま戻らないことがあった。`moze_intel.projecte.handlers.InternalAbilities#tick` は
+`hadFlightItem` をキャッシュして「前 tick と同じ状態なら何もしない」構造で、
+クリエイティブ（飛翔し放題）で `hadFlightItem=true, wasFlyingGamemode=false` になったあと
+サバイバルへ戻ると、どの分岐も成立せず `updateClientServerFlight` が呼ばれない。
+さらにゲームモード変更パケット自体が `mayfly=false` をクライアントへ送るため、
+サーバーだけ `true` という非同期も起こりうる。
+
+`compat/projecte/mixin/InternalAbilitiesMixin`（`@Shadow @Final ServerPlayer player` /
+`@Shadow boolean hadFlightItem`）で:
+
+- HEAD: ゲームモードが変わった tick で `hadFlightItem = false` に落とし、再同期フラグを立てる。
+  さらに `!mayfly && !isCreative() && !isSpectator()` なら毎 tick `hadFlightItem = false` に
+  戻して、スタック状態を自然に解く。
+- RETURN: フラグが立っていれば `player.onUpdateAbilities()` で能力パケットを送り直す。
+
+### 実測（Forge 47.4.28 / CAR 1.20.1-v1a / ProjectE 1.20.1）
+
+| 見たもの | パッチ前 | パッチ後 |
+|---|---|---|
+| `projectE: calls / hits` | 229 / 0 | 4106 / 4106 |
+| `forge:step_height_addition` | 0.6（Step Assist 無し） | 1.0（+0.4 ADDITION） |
+| `abilities.mayfly`（サバイバル、コスメ gem_boots） | 0b | 1b |
+| ダブルタップ + 2 秒ホールド | 上昇しない | `Pos[1]` 95.0 → 173.4 |
+| `/gamemode creative` → `/gamemode survival` 往復 | mayfly=0b に固定 | 1b のまま、飛翔も維持 |
+
+### 入力側の知見（検証ハーネスの罠）
+
+`LocalPlayer#aiStep` の飛翔切り替えは「1 回目の押下から 7 tick 以内・空中・2 回目の押下が
+前 tick に押されていないこと」が条件。自動操作で 12 ms の `key space` を送るとサンプリングに
+拾われず、2 回目が「押しっぱなし」と判定されて成立しない。**80 ms 押下 → 160 ms → 80 ms 押下**
+で確実に成立した。
+
+### 残る制約
+
+- ProjectE 側がメソッド名やシグネチャを変えると `require = 0` により**静かに**パッチが外れる。
+  `/notcosmeticarmor status` の `calls` が増えないことで気づける（`hits` だけでは分からない）。
+- `GemArmorBase#hasAnyPiece` / `hasFullSet` も `Inventory#armor` の直読みだが、ProjectE 1.20.1 の
+  内部に呼び出し箇所が無い（デッドコード）ため対応していない。
 

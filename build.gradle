@@ -112,6 +112,9 @@ tasks.register('exportTestMods', Copy) {
 mixin {
     add sourceSets.main, "${mod_id}.refmap.json"
     config "${mod_id}.mixins.json"
+    // Optional compatibility patches. Each one carries its own IMixinConfigPlugin, so the config is
+    // only applied when the targeted mod is actually installed.
+    config "${mod_id}.projecte.mixins.json"
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -50,6 +50,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 - **item tick**: コスメ枠のアイテムにも `inventoryTick` / Forge の `onArmorTick` が走ります。エネルギーやチャージを持つ MOD 防具（TiC など）の動作に必要です。
 - **動き（jetpack など）**: コスメ装備の tick が `setDeltaMovement` で速度を変えたときは、その変化を `ClientboundSetEntityMotionPacket` で本人にも送り返します。プレイヤーの移動はクライアント権威（クライアントの自己予測が正）なので、これが無いとサーバー側だけで飛んでいる状態になり、画面では何も起きません。
 - **耐久**: 実装備が耐久ダメージを受けたとき、同じスロットのコスメ装備にも**同じ量**のダメージが入ります（4 分の 1 丸め・最低 1 のバニラ規則、Unbreaking、壊れたら消える挙動まで同じ）。`/notcosmeticarmor status` の `dmg=` で両方の耐久値を確認できます。
+- **相性の悪い MOD への小さなパッチ（同梱）**: `Inventory#armor` を直接読む MOD は、上の 4 層では拾えません。そういう MOD に限り、その MOD の判定メソッド 1 つにだけ注入して「実装備で見つからなければコスメ枠も見る」と広げます。対象 MOD が入っていなければ何も適用されません（現在は ProjectE。下記の[互換性](#互換性実機で確認した-mod)）。
 
 ## 何が機能しないか（意図的）
 
@@ -68,23 +69,34 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [Iron Jetpacks](https://modrinth.com/mod/iron-jetpacks) + Cucumber | 7.0.9 / 7.0.16 | コスメ枠で飛行する（速度は実装備側が優先） |
 | [ManaitaMTK](https://modrinth.com/mod/manaitamtk) | 1.7.4 | コスメ枠でも「ダメージ 0・死亡しない」が成立 |
 | [AdvancedAE](https://modrinth.com/mod/advanced-ae) | 1.3.6 | 量子ヘルメットの水中呼吸がコスメ枠で動く（アップグレード導入・電力供給が前提） |
-| [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減は動く。ジェムの飛翔と Step Assist は動かない（下記） |
+| [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減・**飛翔・Step Assist** がコスメ枠で動く（互換パッチ同梱） |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
 独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
 結果が変わります（[仕組み](#仕組み)）。`Inventory#armor` を直接読む MOD は、
-そのリスト自体を書き換えない限りコスメ装備を見ません。
+そのリスト自体を書き換えない限りコスメ装備を見ません（ProjectE だけは同梱のパッチで対応しています）。
 
 ### コスメ枠では効かないもの（MOD 側の実装都合）
 
-- **ProjectE のジェム防具の飛翔・Step Assist**: `PlayerHelper.checkArmorHotbarCurios` が
-  `player.getInventory().armor`（実装備リスト）を直接 stream するため、コスメ枠の
-  ジェムアーマーは判定に入りません。同じ MOD の満腹度回復（`GemArmorBase#onArmorTick`）や
-  ダメージ軽減（`PlayerEvents#onLivingHurt` → `getItemBySlot`）、
-  `TickEvents`（`getArmorSlots`）は動きます。
 - **`Inventory#armor` を直接読む MOD 全般**: 上書きできるのは `getItemBySlot` / `getArmorSlots`
   であって、インベントリの生リストそのものではありません。tick 窓（interleave）の中だけは
   `Inventory#armor` にコスメのコピーが入るので、tick 内で生リストを読む MOD はコスメを見ます。
+  それ以外の場面で生リストを読む MOD はコスメを見ないので、必要なものには
+  [互換パッチ](#projecte-の互換パッチ)を個別に用意しています。
+
+### ProjectE の互換パッチ
+
+ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`Inventory#armor` を
+直接 stream する）で判定するため、コスメ枠のジェムアーマーでは効きませんでした。
+本 MOD はこのメソッドの戻り値だけを「実装備で一致しなかった場合に `getItemBySlot` 経由で
+コスメ枠も見る」と広げます。ProjectE が既に `true` を返した場合は何もしません。
+
+- 攻撃能力（爆発・電撃）のゲートである `GemArmorBase#hasAnyPiece` にも同じ注入をしていますが、
+  こちらは**実機未検証**です。
+- 対象クラスが無い環境では mixin config を読み込みません（`ProjectEMixinPlugin`）。
+- 無効にしたいときは `config/notcosmeticarmor-server.toml` の `compat.patchProjectE=false`。
+- `/notcosmeticarmor status` の `projectE: patch=... calls=... hits=...` で、呼ばれた回数と
+  一致した回数が分かります（`calls` が増え続け `hits` が 0 なら、コスメ防具が条件を満たしていません）。
 
 ### 本 MOD が原因ではない起動クラッシュ（実機で切り分け済み）
 
@@ -107,6 +119,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | `behavior.tickCosmeticItems` | true | コスメ枠のアイテムを tick する |
 | `behavior.cosmeticDurability` | true | 実装備が受けた耐久ダメージをコスメ装備にも同じ量だけ入れる |
 | `behavior.ignoreSkinArmorFlag` | true | CAR の「skin armor」フラグが立ったスロットも機能させる |
+| `compat.patchProjectE` | true | ProjectE の飛翔・Step Assist 判定にコスメ枠を足す（ProjectE 導入時のみ意味を持つ） |
 
 ## コマンド
 
@@ -341,6 +354,28 @@ jetpack は燃料を消費しません（クライアント側の表示だけ減
 
 最初は飛びませんでした（Y が 95.9 → 96.3 → 96.1 で、エネルギーだけ 800000 → 789320 に減る）。
 原因と修正は [docs/plan-review.md](docs/plan-review.md) の §14 に書いています。
+
+### ProjectE ジェム防具の検証（実機）
+
+[ProjectE](https://modrinth.com/mod/projecte) 1.20.1 のジェムのブーツ（`projecte:gem_boots`）を
+コスメ枠の FEET、ジェムの鎧（`projecte:gem_chestplate`）を CHEST に入れ、実装備は空にして検証しました。
+
+| 見たもの | 結果 |
+|---|---|
+| `/notcosmeticarmor status` の `projectE:` | `patch=true calls=4106 hits=4106`（呼ばれた回数と一致した回数が同じ） |
+| `forge:step_height_addition` | `1.0`（基準 0.6 + Step Assist 0.4 ADDITION） |
+| `abilities.mayfly`（サバイバル） | `1b` |
+| ジャンプ 2 回（80 ms 押下 → 160 ms → 80 ms）+ 2 秒ホールド | 飛翔開始。`Pos[1]` が 95.0 → 173.4 まで上昇 |
+| `/gamemode creative` → `/gamemode survival` の往復 | `mayfly=1b` のまま。往復後もダブルタップで飛翔できる |
+
+パッチ前は `calls` が増えても `hits` が 0 で、`mayfly` は 0b、`step_height_addition` も
+0.6 のままでした。原因は 2 つあり、どちらも [docs/plan-review.md](docs/plan-review.md) の §16 に
+書いています（判定が `Inventory#armor` の直読み / `InternalAbilities` のキャッシュが
+ゲームモード変更で固まる）。
+
+飛翔の開始は**ジャンプのダブルタップ**である点に注意してください。キー入力の押下が短すぎると
+（12 ms 程度）クライアントの入力サンプリングに拾われず、2 回目の押下が「押しっぱなしの継続」と
+判定されて飛びません。
 
 ## 謝辞
 

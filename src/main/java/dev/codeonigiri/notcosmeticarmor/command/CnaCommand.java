@@ -1,6 +1,7 @@
 package dev.codeonigiri.notcosmeticarmor.command;
 
 import dev.codeonigiri.notcosmeticarmor.car.CarBridge;
+import dev.codeonigiri.notcosmeticarmor.compat.projecte.ProjectECompat;
 import dev.codeonigiri.notcosmeticarmor.config.CnaConfig;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticSlots;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
@@ -11,7 +12,10 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.event.RegisterCommandsEvent;
 
 /** {@code /notcosmeticarmor status} for debugging. */
@@ -50,6 +54,20 @@ public final class CnaCommand {
                     .append(" probe=").append(state != null && state.probe)
                     .append('\n');
             out.append("  carInv: ").append(CarBridge.describe(player.getUUID())).append('\n');
+            out.append("  projectE: patch=").append(CnaConfig.projectECompat())
+                    .append(" calls=").append(ProjectECompat.CALLS.get())
+                    .append(" hits=").append(ProjectECompat.HITS.get())
+                    .append('\n');
+            AttributeInstance step = player.getAttribute(ForgeMod.STEP_HEIGHT_ADDITION.get());
+            out.append("  stepHeight=").append(step == null ? "n/a" : step.getValue());
+            if (step != null) {
+                for (AttributeModifier modifier : step.getModifiers()) {
+                    out.append(" [").append(modifier.getName()).append(' ')
+                            .append(modifier.getAmount()).append(' ')
+                            .append(modifier.getOperation()).append(']');
+                }
+            }
+            out.append('\n');
             for (int i = 0; i < CosmeticSlots.COUNT; i++) {
                 ItemStack real = player.getInventory().armor.get(i);
                 ItemStack cosmetic = CosmeticStacks.get(player, i);

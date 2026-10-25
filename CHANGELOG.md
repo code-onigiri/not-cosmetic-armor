@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.2.0 — 2026-10-25
+
+### 変更
+
+- **ProjectE の互換パッチを追加（任意・既定で有効）**: ProjectE のジェム防具は
+  `PlayerHelper#checkArmorHotbarCurios` が `Inventory#armor`（実装備リスト）を直接読むため、
+  コスメ枠では飛翔と Step Assist が効きませんでした。このメソッドの戻り値を、実装備で
+  一致しなかったときだけ `Player#getItemBySlot` 経由でコスメ防具にも問い合わせるよう広げました。
+  ProjectE が入っていない環境では mixin config 自体が適用されない（`IMixinConfigPlugin` で判定）ので、
+  他 MOD への影響はありません。
+- **ProjectE の飛翔フラグがゲームモード変更後に固まる問題を修正**: `InternalAbilities#tick` は
+  `hadFlightItem` をキャッシュしているため、クリエイティブ（飛翔し放題）からサバイバルへ戻ると
+  「飛翔アイテムを持っている」という古い状態のまま再評価されず、`abilities.mayfly` が
+  `false` に固定されることがありました。ゲームモードが変わった tick でキャッシュを捨て、
+  `Player#onUpdateAbilities` で能力パケットを送り直します。
+- **設定に `compat.patchProjectE`（既定 true）を追加**: パッチが原因と疑われるときに
+  切り分けられるようにしました。`/notcosmeticarmor status` に `projectE: patch=... calls=... hits=...`
+  と `stepHeight=...` を追加し、パッチが呼ばれているか・一致しているかをその場で確認できます。
+
+### 検証済み（追加）
+
+- ProjectE 1.20.1 のジェムブーツをコスメ枠に入れて `abilities.mayfly=1b`、
+  ジャンプ 2 回で飛翔開始 → 2 秒のホールドで Y が上昇すること。
+- 同ジェムブーツで Step Assist（`forge:step_height_addition` = 1.0 = 基準 0.6 + 0.4）。
+- クリエイティブ → サバイバルの往復後も `mayfly` が維持されること。
+
+### 既知の制限（更新）
+
+- ProjectE のジェム防具の飛翔 / Step Assist は **1.2.0 でコスメ枠でも動きます**（上記）。
+  ジェムの攻撃能力（攻撃時の爆発・ヘルメットの電撃）は `GemArmorBase#hasAnyPiece` にも
+  同じ形で注入していますが、**実機での確認はまだ**です。
+
 ## 1.1.0 — 2026-10-25
 
 ### 変更

@@ -13,6 +13,7 @@ public final class CnaConfig {
     public static final ForgeConfigSpec.BooleanValue TICK_COSMETIC_ITEMS;
     public static final ForgeConfigSpec.BooleanValue COSMETIC_DURABILITY;
     public static final ForgeConfigSpec.BooleanValue IGNORE_SKIN_FLAG;
+    public static final ForgeConfigSpec.BooleanValue PATCH_PROJECT_E;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -44,6 +45,17 @@ public final class CnaConfig {
         TICK_COSMETIC_ITEMS = builder.define("tickCosmeticItems", true);
         COSMETIC_DURABILITY = builder.define("cosmeticDurability", true);
         IGNORE_SKIN_FLAG = builder.define("ignoreSkinArmorFlag", true);
+        builder.pop();
+
+        builder.comment(
+                "Compatibility patches for other mods. Each patch is only installed when the mod it",
+                "targets is present; these switches exist to rule the patch out when a mod misbehaves.",
+                "patchProjectE: let ProjectE's gem armor provide flight, step assist and the offensive",
+                "  abilities (chest explosion, helmet zap) from the cosmetic slots. ProjectE reads",
+                "  Inventory#armor directly, which no other layer of this mod touches, so without the",
+                "  patch only the passive effects (auto feeding, damage reduction, ...) work."
+        ).push("compat");
+        PATCH_PROJECT_E = builder.define("patchProjectE", true);
         builder.pop();
 
         SPEC = builder.build();
@@ -78,5 +90,9 @@ public final class CnaConfig {
 
     public static boolean ignoreSkinFlag() {
         return !SPEC.isLoaded() || IGNORE_SKIN_FLAG.get();
+    }
+
+    public static boolean projectECompat() {
+        return !SPEC.isLoaded() || PATCH_PROJECT_E.get();
     }
 }
