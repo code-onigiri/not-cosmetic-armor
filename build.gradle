@@ -20,7 +20,7 @@ version = mod_version
 group = mod_group_id
 
 base {
-    archivesName = "${mod_id}-1.20.1"
+    archivesName = "${mod_id}-${minecraft_version}"
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
@@ -134,6 +134,7 @@ tasks.named('processResources', ProcessResources).configure {
             forge_version_range    : forge_version_range,
             loader_version_range   : loader_version_range,
             mod_id                 : mod_id,
+            mod_name               : mod_name,
             mod_version            : mod_version,
     ]
     inputs.properties replaceProperties
@@ -162,7 +163,7 @@ jar {
                 'Specification-Title'     : mod_id,
                 'Specification-Vendor'    : 'code-onigiri',
                 'Specification-Version'   : '1',
-                'Implementation-Title'    : project.name,
+                'Implementation-Title'    : mod_name,
                 'Implementation-Version'  : project.jar.archiveVersion,
                 'Implementation-Vendor'   : 'code-onigiri'
         ])

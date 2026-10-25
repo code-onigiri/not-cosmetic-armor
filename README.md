@@ -1,6 +1,18 @@
 # Not Cosmetic Armor
 
+<img src="src/main/resources/logo.png" width="128" alt="Not Cosmetic Armor">
+
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-3c8527)](https://www.minecraft.net/)
+[![Forge](https://img.shields.io/badge/Forge-47.x-f16436)](https://files.minecraftforge.net/)
+[![Java](https://img.shields.io/badge/Java-17-007396)](https://adoptium.net/)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+
 Cosmetic Armor Reworked のコスメ装備を、**見た目だけ**から**実際に機能する装備**に変える 1.20.1 Forge 用アドオンです。
+
+> **English**: Makes the cosmetic slots of [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)
+> actually work — armor attributes, enchantments, item ticks, durability mirroring and movement
+> sync (jetpacks fly). Requires CAR on both client and server. See [docs/publishing.md](docs/publishing.md)
+> for the English description.
 
 コスメ枠に防具を入れると、その防具の防御力・防具強度・ノックバック耐性などの属性と、
 Protection / Thorns / Frost Walker などのエンチャントが有効になります。
@@ -17,6 +29,16 @@ Protection / Thorns / Frost Walker などのエンチャントが有効になり
 
 CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い場合は Forge が
 「Missing or unsupported mandatory dependencies」として起動を止めます。
+
+## 導入
+
+1. [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)（1.20.1 版）を `mods/` に入れる。
+2. 本 MOD の jar（`notcosmeticarmor-1.20.1-<version>.jar`）を `mods/` に入れる。
+3. クライアントとサーバーの**両方**に入れる（機能の判定はサーバー側で行い、描画は CAR が担当するため）。
+4. サーバー側は `config/notcosmeticarmor-server.toml` が生成される。既定で有効。
+
+導入できているかは `/notcosmeticarmor status`（権限レベル 2 以上）で確認できます。
+`car: detected` と `mode=INTERLEAVE` が出ていれば正常です。
 
 ## 何が機能するか
 
@@ -35,6 +57,19 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 - **軽減の上限**: ダメージ軽減エンチャントはバニラの規則どおり EPF 合計 20（最大 80%）で頭打ちです。実装備とコスメで積んでも上限は変わりません。
 - **jetpack の速度は加算されない**: jetpack の推力は 1 スタックぶんの `speedVert` で頭打ちになる仕様なので、実装備とコスメに 1 個ずつ入れても 2 倍にはなりません。クライアントは実装備しか見えないため、両方入れると**実装備側の速度**に引っ張られます（[検証ログ](#iron-jetpacksの検証実機)）。
 - **ピグリン**: `PiglinAi` が金防具を `getArmorSlots` で判定するため、コスメの金防具でもピグリンが敵対しなくなります（バニラの判定と同じ経路に乗るため、意図的に残しています）。
+
+## 互換性（実機で確認した MOD）
+
+| MOD | バージョン | 結果 |
+|---|---|---|
+| [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked) | 1.20.1-v1a | 必須。コスメ枠の保持と描画を担当 |
+| [Tinkers' Construct](https://modrinth.com/mod/tinkers-construct) + Mantle | 3.12.1.231 / 2023.11.24 | コスメ枠の属性・耐久ミラーが動く（`ArmorItem` 系） |
+| [Iron Jetpacks](https://modrinth.com/mod/iron-jetpacks) + Cucumber | 7.0.9 / 7.0.16 | コスメ枠で飛行する（速度は実装備側が優先） |
+| [ManaitaMTK](https://modrinth.com/mod/manaitamtk) | 1.7.4 | コスメ枠でも「ダメージ 0・死亡しない」が成立 |
+
+バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
+独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
+結果が変わります（[仕組み](#仕組み)）。
 
 ## 設定
 
@@ -125,7 +160,8 @@ implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
 モードは設定の組み合わせで決まります: `enabled=false` が OFF、`mirrorAttributes` のみで ATTRIBUTE、
 `+overrideQueries` で PRIORITY、`+interleave` で INTERLEAVE（既定）。
 
-設計検討の詳細は [docs/plan-review.md](docs/plan-review.md) を参照。
+設計検討の詳細は [docs/plan-review.md](docs/plan-review.md)、公開手順と掲載文は
+[docs/publishing.md](docs/publishing.md)、変更履歴は [CHANGELOG.md](CHANGELOG.md) を参照。
 
 ## 描画（L4）
 
@@ -250,6 +286,14 @@ jetpack は燃料を消費しません（クライアント側の表示だけ減
 原因と修正は [docs/plan-review.md](docs/plan-review.md#14-追記移動はクライアント権威--jetpack-は動きだけ別扱いだった)
 の §14 に書いています。
 
+## 謝辞
+
+- [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)（zlainsama / original by dmillerw）— コスメ枠のインベントリと描画。
+- Forge / Mixin / ForgeGradle の開発陣。
+
 ## ライセンス
 
-MIT
+MIT（[LICENSE](LICENSE)）。Cosmetic Armor Reworked 本体は MMPL 1.0.1 で、本 MOD は同 MOD を
+再配布せず依存としてのみ参照します。
+
+不具合報告・要望は [Issues](https://github.com/code-onigiri/not-cosmetic-armor/issues) へ。
