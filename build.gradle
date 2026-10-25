@@ -115,6 +115,7 @@ mixin {
     // Optional compatibility patches. Each one carries its own IMixinConfigPlugin, so the config is
     // only applied when the targeted mod is actually installed.
     config "${mod_id}.projecte.mixins.json"
+    config "${mod_id}.endinglib.mixins.json"
 }
 
 tasks.withType(JavaCompile).configureEach {

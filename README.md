@@ -47,9 +47,10 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
   この上書きは**クライアント側でも**効きます（CAR の `CosArmorAPI.getCAStacksClient` からコスメを読む）。水中呼吸のようにクライアント側の判定も見る MOD や、クライアントで完結する表示にコスメ装備を反映させるためです。描画中だけは CAR の差し替えと二重にならないよう止めています（[描画（L4）](#描画l4)）。
   同じスロットの実装備のエンチャントとも**合算**されます（属性ミラーと同じ「両方足す」方針）。バニラの軽減は EPF の合計が 20 で頭打ちなので、二重に Protection IV を積んでも上限を超えません。
 - **tick 内の参照（インタリーブ）**: 奇数ゲーム tick の `Player#tick` の間だけ、コスメ装備を実装備枠に**コピー**して入れ、tick の終わりに元へ戻します。鞘翅の滑翔判定、カメの甲羅の水中呼吸、MOD の「この装備を着ているか」判定など、tick の内側で `getItemBySlot` を読む処理にもコスメ装備が見えます。クライアントには何も送られず、実装備は一切失われません。
-- **item tick**: コスメ枠のアイテムにも `inventoryTick` / Forge の `onArmorTick` が走ります。エネルギーやチャージを持つ MOD 防具（TiC など）の動作に必要です。
+- **item tick**: コスメ枠のアイテムにも `inventoryTick` / Forge の `onArmorTick` が走ります。エネルギーやチャージを持つ MOD 防具（TiC など）の動作に必要です。**クライアント側でも**同じ tick を回すので、「tick の中でプレイヤーの能力を書き換える」MOD 防具（夢幻終焉チェストプレートの `mayfly`、など）もコスメ枠で機能します。
 - **動き（jetpack など）**: コスメ装備の tick が `setDeltaMovement` で速度を変えたときは、その変化を `ClientboundSetEntityMotionPacket` で本人にも送り返します。プレイヤーの移動はクライアント権威（クライアントの自己予測が正）なので、これが無いとサーバー側だけで飛んでいる状態になり、画面では何も起きません。
 - **耐久**: 実装備が耐久ダメージを受けたとき、同じスロットのコスメ装備にも**同じ量**のダメージが入ります（4 分の 1 丸め・最低 1 のバニラ規則、Unbreaking、壊れたら消える挙動まで同じ）。`/notcosmeticarmor status` の `dmg=` で両方の耐久値を確認できます。
+- **セット判定（fantasy_ending / EndingLib）**: 4 点セットの判定を「実装備とコスメ枠の合算」に広げます。コスメ枠に別の防具を載せても、実装備の夢幻終焉 4 点セットは消えません（逆に、実装備 2 点 + コスメ 2 点でも 4 セットになります）。判定は EndingLib の `ArmorUtils#getArmorSet` 1 メソッドだけを上書きするので、他の MOD の判定には影響しません。
 - **相性の悪い MOD への小さなパッチ（同梱）**: `Inventory#armor` を直接読む MOD は、上の 4 層では拾えません。そういう MOD に限り、その MOD の判定メソッド 1 つにだけ注入して「実装備で見つからなければコスメ枠も見る」と広げます。対象 MOD が入っていなければ何も適用されません（現在は ProjectE。下記の[互換性](#互換性実機で確認した-mod)）。
 
 ## 何が機能しないか（意図的）
@@ -70,7 +71,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 | [ManaitaMTK](https://modrinth.com/mod/manaitamtk) | 1.7.4 | コスメ枠でも「ダメージ 0・死亡しない」が成立 |
 | [AdvancedAE](https://modrinth.com/mod/advanced-ae) | 1.3.6 | 量子ヘルメットの水中呼吸がコスメ枠で動く（アップグレード導入・電力供給が前提） |
 | [ProjectE](https://modrinth.com/mod/projecte) | 1.20.1 | ジェム防具の満腹度回復・ダメージ軽減・**飛翔・Step Assist** がコスメ枠で動く（互換パッチ同梱） |
-| fantasy_ending（要 EndingLib） | 2.7.20 / 2.2.1fix | 夢幻終焉 4 点のセット効果（128 以下のダメージ無効化・シールド）がコスメ枠で動く |
+| fantasy_ending（要 EndingLib） | 2.7.20 / 2.2.1fix | 夢幻終焉 4 点のセット効果（128 以下のダメージ無効化・シールド・死亡時復帰・効果無効）が動く。**実装備とコスメ枠の合算で判定**するので、実装備のセットがコスメに隠れない |
 
 バニラの `ArmorItem` の属性・耐久経路を使う防具なら、同じ経路に乗るので同様に動く見込みです。
 独自の装備判定を持つ MOD は、その MOD が `getItemBySlot` / `getArmorSlots` を読むかどうかで
@@ -128,11 +129,15 @@ ProjectE は飛翔と Step Assist を `PlayerHelper#checkArmorHotbarCurios`（`I
 ```
 /notcosmeticarmor status   # 状態表示
 /notcosmeticarmor probe    # tick 窓の内外で getItemBySlot が何を返すかをログに出す（デバッグ）
+/notcosmeticarmor cosmetic <feet|legs|chest|head> <item id|none>   # コスメ枠に直接入れる（検証用）
 ```
 
 権限レベル 2 以上。`status` は CAR の検出状況、実効モード（OFF / ATTRIBUTE / PRIORITY / INTERLEAVE）、
 設定値、各スロットの実装備/コスメ装備、適用中の modifier 数、現在の防御力、差分ガードと tick 窓の
-状態を表示します。`probe` を有効にすると、数秒おきに次のようなログが出ます:
+状態を表示します。`cosmetic` はワールドを出ずにコスメ枠の組み合わせを変えるためのコマンドです
+（`/notcosmeticarmor cosmetic chest fantasy_ending:fantasy_ending_chestplate` のように使います。
+CAR のインベントリ経由で書くので、通常の編集と同じように同期・保存されます）。
+`probe` を有効にすると、数秒おきに次のようなログが出ます:
 
 ```
 probe(inside window): chest seen=1 golden_chestplate storedReal=1 diamond_chestplate armorValue=13
@@ -403,6 +408,24 @@ fantasy_ending の装備判定（`ArmorUtils#getArmorSet`）は `getItemBySlot` 
 
 なお、夢幻終焉の次元（`fantasy_ending:faded_void`）では**セットを着ていなくても**小さいダメージが
 無効化されるため、検証は通常世界（overworld）で行う必要があります。
+
+### コスメ装備が実装備のセット判定を隠す件（実機、1.4.0）
+
+「コスメに何か入れると、実装備のセット能力（飛行・kill 無効化）が消える」という報告を
+上の構成で再現しました。1.3.0 では次の 2 つが原因でした。
+
+| ケース | 実装備 | コスメ枠 | 1.3.0 | 1.4.0 |
+|---|---|---|---|---|
+| A | 夢幻終焉 4 点 | ダイヤ 4 点 | `set=DIAMOND is4=false shield[level=0]`、`/kill` で死亡、HUD バー無し | `set=FANTASY_ENDING_MATERIAL is4=true shield[level=4936]`、`/kill` で死亡しない、`/damage 50` 無効、`/damage 200` は通る、毒は拒否、HUD バー表示、飛行可（Y 173.4 → 188.7 / 2 秒） |
+| B | 空 | 夢幻終焉 4 点 | 動作（`is4=true` / シールド 4936） | 同じ（回帰なし） |
+
+- 原因 1: EndingLib の `ArmorUtils#getArmorSet` は `getItemBySlot` を 4 回読むだけなので、
+  コスメがあるスロットでは実装備が見えない（→ `ArmorSetUnion` で両方を見る）。
+- 原因 2: コスメ枠の item tick がサーバー専用で、`abilities.mayfly` がクライアントに立たない
+  （→ クライアント側でも item tick を回す）。
+- 原因 3（原因 1 の修正後も残った）: tick 窓の中では実装備が `CosmeticState#windowReal` に
+  退避されるため、窓の中だけ実装備セットが消える。シールドのレベルが半 tick おきに 0 へ
+  リセットされ、HUD バーが出なかった（→ `ArmorSetUnion` が退避中のスタックも見る）。
 
 ## 謝辞
 

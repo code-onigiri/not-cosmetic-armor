@@ -135,10 +135,21 @@ public abstract class PlayerMixin {
         }
     }
 
+    /**
+     * The client has to tick the cosmetic stacks as well.
+     *
+     * <p>Real armor is ticked by {@code Inventory#tick} on both sides, and modded armor frequently
+     * grants client visible abilities from {@code onArmorTick} without looking at the side (for
+     * example fantasy_ending's chestplate sets {@code mayfly}). A cosmetic stack is not in
+     * {@code Inventory#armor}, so without this call the client never learns it may fly even though the
+     * server already granted the ability.
+     */
     @Inject(method = "tick", at = @At("TAIL"))
     private void notcosmeticarmor$tickEnd(CallbackInfo ci) {
         if ((Object) this instanceof ServerPlayer player) {
             CosmeticTick.onTickEnd(player);
+        } else {
+            CosmeticTick.onTickEndClient((Player) (Object) this);
         }
     }
 }

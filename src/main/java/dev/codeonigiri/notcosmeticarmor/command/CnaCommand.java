@@ -9,17 +9,28 @@ import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.event.RegisterCommandsEvent;
 
-/** {@code /notcosmeticarmor status} for debugging. */
+/**
+ * {@code /notcosmeticarmor status} for debugging, plus {@code /notcosmeticarmor cosmetic} to place a
+ * test item in a cosmetic slot. Writing through CAR's inventory means the change is synced and saved
+ * like a normal cosmetic edit, which makes it possible to test several armor combinations without
+ * leaving the world (editing {@code .cosarmor} by hand only works while the world is closed).
+ */
 public final class CnaCommand {
     private CnaCommand() {
     }
@@ -30,6 +41,14 @@ public final class CnaCommand {
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("probe").executes(ctx -> probe(ctx.getSource())))
+                .then(Commands.literal("cosmetic")
+                        .then(Commands.argument("slot", StringArgumentType.word())
+                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                        new String[] {"feet", "legs", "chest", "head"}, builder))
+                                .then(Commands.argument("item", StringArgumentType.greedyString())
+                                        .executes(ctx -> cosmetic(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "slot"),
+                                                StringArgumentType.getString(ctx, "item"))))))
         );
     }
 
@@ -83,6 +102,48 @@ public final class CnaCommand {
         }
         String message = out.toString();
         source.sendSuccess(() -> Component.literal(message), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int cosmetic(CommandSourceStack source, String slotName, String itemName) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("notcosmeticarmor cosmetic needs a player"));
+            return 0;
+        }
+        int slot = switch (slotName) {
+            case "feet" -> 0;
+            case "legs" -> 1;
+            case "chest" -> 2;
+            case "head" -> 3;
+            default -> -1;
+        };
+        if (slot < 0) {
+            source.sendFailure(Component.literal("slot must be feet, legs, chest or head"));
+            return 0;
+        }
+        ItemStack stack = ItemStack.EMPTY;
+        String trimmed = itemName.trim();
+        if (!trimmed.equals("none") && !trimmed.equals("air")) {
+            ResourceLocation id = ResourceLocation.tryParse(trimmed);
+            if (id == null) {
+                source.sendFailure(Component.literal("not an item id: " + trimmed));
+                return 0;
+            }
+            Item item = BuiltInRegistries.ITEM.get(id);
+            if (item == Items.AIR) {
+                source.sendFailure(Component.literal("unknown item: " + id));
+                return 0;
+            }
+            stack = new ItemStack(item);
+        }
+        if (!CarBridge.set(player.getUUID(), slot, stack)) {
+            source.sendFailure(Component.literal("CAR did not accept the write (not detected?)"));
+            return 0;
+        }
+        ItemStack result = stack;
+        source.sendSuccess(() -> Component.literal("cosmetic " + slotName + " = "
+                + (result.isEmpty() ? "empty" : result.getHoverName().getString())), false);
         return Command.SINGLE_SUCCESS;
     }
 

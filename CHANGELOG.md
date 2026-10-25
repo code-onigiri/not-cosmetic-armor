@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.4.0 — 2026-10-25
+
+### 修正
+
+- **コスメ装備が実装備の「セット判定」を隠していた**（EndingLib 経由の MOD、実例は fantasy_ending）。
+  夢幻終焉 4 点を実装備していても、コスメ枠に別の防具を 4 点入れると 4 セットが成立しなくなり、
+  `/kill` で死亡し、毒や弱体化も通るようになっていました。
+  EndingLib の `ArmorUtils#getArmorSet` は `getItemBySlot` を 4 回読むだけで判定するため、
+  コスメがあると実装備が見えません。判定を「実装備・コスメのどちらかが一致するスロットが 4 つ以上」
+  に広げるパッチ（`ArmorSetUnion`）を同梱しました。属性ミラーと同じ「両方足す」方針です。
+  あわせて tick 窓の中では実装備が `CosmeticState#windowReal` に退避されるため、その層も見ます
+  （これが無いとシールドのレベルが半 tick おきに 0 へリセットされていました）。
+- **コスメ装備の item tick がサーバーでしか走っていなかった**。
+  バニラは `Inventory#tick` を両側で回すので実装備の `onArmorTick` はクライアントでも動きますが、
+  コスメ枠の tick はサーバー専用でした。そのため夢幻終焉チェストプレートの
+  `abilities.mayfly = true` がサーバーにしか立たず、ダブルタップしても飛べませんでした
+  （HUD だけ出る、という症状）。クライアント側でも同じ tick を回すようにしました。
+
+### 追加
+
+- `/notcosmeticarmor cosmetic <feet|legs|chest|head> <item id|none>`: コスメ枠にアイテムを直接入れます
+  （権限レベル 2）。ワールドを出ずに組み合わせを変えて検証するためのコマンドです。
+- 対象 MOD が入っていない環境では、追加した mixin config は読み込まれません
+  （`EndingLibMixinPlugin` が `ArmorUtils` の有無を確認）。
+
+### 検証済み（実機、`/tmp/nca-test` = 実インスタンスのコピー + EndingLib）
+
+| ケース | 構成 | 結果 |
+|---|---|---|
+| A | 実装備=夢幻終焉 4 点 / コスメ=ダイヤ 4 点 | `fantasyEnding: set=FANTASY_ENDING_MATERIAL is4=true shield[level=4936 dr=128.0]`、`/damage @p 50 minecraft:mob_attack` は無効、`/damage @p 200` は通る、`/effect give @p minecraft:poison 10 2` は拒否、`/kill @p` で死亡しない、シールド HUD のバーが表示、ダブルタップで飛行（Y 173.4 → 188.7 / 2 秒） |
+| A（1.3.0 まで） | 同上 | `set=DIAMOND is4=false shield[level=0]`、`/kill @p` で死亡、HUD のバー無し |
+| B | 実装備=空 / コスメ=夢幻終焉 4 点 | `is4=true shield[level=4936]`、`abilities.mayfly=1b`、Y 141.0 → 153.2（2 秒）、`/kill @p` で死亡しない |
+
+### 仕様として明記
+
+- 4 セット判定は**実装備とコスメ枠の合算**です。たとえば実装備に 2 点、コスメに 2 点でも 4 セットに
+  なります（属性ミラーが両方を足すのと同じ考え方）。実装備だけで組んだ従来の判定は変わりません。
+
 ## 1.3.0 — 2026-10-25
 
 ### 変更

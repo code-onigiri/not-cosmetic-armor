@@ -87,6 +87,18 @@ timeout 1800 nix develop --command xvfb-run -n 98 -s "-screen 0 1280x720x24" \
   他 MOD 同士の衝突で、こちらのせいではないことが多い。
 - `ClassMetadataNotFoundException` は対象 MOD の依存不足（例: fantasy_ending には EndingLib が要る）。
 
+### R7.5. 装備の「見え方」は 3 層ある
+
+MOD が装備を判定する経路は 1 つではない。コスメ機能を入れると、同じ 1 スロットに
+
+1. `getItemBySlot` / `getArmorSlots`（我々が上書きしている「見える層」）
+2. `Inventory#armor`（実体。tick 窓の中ではコスメのコピーが入る）
+3. tick 窓の外へ退避された実装備（`CosmeticState#windowReal`）
+
+が同時に存在する。片方だけ直すと「半分の tick だけ能力が消える」ような壊れ方をする。
+`ArmorSetUnion` は 3 層すべてを見る。MOD 側の判定メソッドを 1 つ特定したら、
+**そのメソッドが tick の内側で呼ばれるか**まで確認すること（`LivingTickEvent` は窓の中）。
+
 ### R8. 終わったら docs に残す
 
 - 時系列の知見は `docs/plan-review.md` に § を足す（現象 → 原因 → 修正 → 実測 → 残る制約）。
@@ -105,6 +117,9 @@ timeout 1800 nix develop --command xvfb-run -n 98 -s "-screen 0 1280x720x24" \
 | TS のテンプレートリテラルに `${...}` をそのまま書いた | 補間されて `ReferenceError` | `${...}` は `\${...}` とエスケープする |
 | 12 ms のキー押下でダブルタップ | サンプリングに拾われず飛ばない（原因究明に 2 サイクル） | 80 ms 押下 |
 | 効果が無いと判断して修正を重ねた | 実際は計測側の問題（peaceful の回復、`/damage` の既定値、チャット遅延） | 計測手順を先に検証する |
+| コスメが無い状態だけで「動く」と確認して終えた | コスメを 1 枚載せた瞬間に実装備のセット能力が消える不具合を見逃した | コスメあり/なし × 実装備あり/なしの 2×2 を測る |
+| `/data get` の `abilities.mayfly` が 1b だけで「飛べる」と判断 | サーバーだけ true でクライアントは false。実際には飛べなかった | 能力はサーバー値と実挙動（Y の変化）を両方見る |
+| テレポート直後にダブルタップを送った | チャット欄が 1 回目の押下を吸い、飛ばないと誤読 | 送信後 1 秒待ち、クリックでフォーカスを戻してから押す |
 
 ## 検証ハーネス
 
@@ -126,6 +141,16 @@ python3 /tmp/cae/mkcos.py '{"0":{"id":"minecraft:golden_boots","enchant":[[2,4]]
 `.cosarmor` は非圧縮 NBT。`Size:int` / `Hidden:string` / `Items:List<Compound>`（`Slot:int` + ItemStack）。
 エンチャント ID は 1.20.1 の registry 順（protection=0, feather_falling=2, respiration=5, ...）。
 **ワールドを閉じてから書き換える**こと（開いている間の変更は上書きされる）。
+
+### コスメ枠にアイテムを入れる（ワールドを出ずに切り替える）
+
+```
+/notcosmeticarmor cosmetic chest fantasy_ending:fantasy_ending_chestplate
+/notcosmeticarmor cosmetic chest none
+```
+
+CAR のインベントリ経由で書くので同期・保存も通常の編集と同じ。`.cosarmor` を直接書き換える方法は
+**ワールドを閉じているときしか使えない**（開いている間の変更は退出時に上書きされる）。
 
 ### 状態確認
 

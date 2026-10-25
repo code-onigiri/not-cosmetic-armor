@@ -654,3 +654,86 @@ EndingLib（`EndingLibraryTweaked-1.20.1-2.2.1fix.jar`）と fantasy_ending
 - 128 のしきい値と `outResistance 0.25` は fantasy_ending 側の実装。こちらでは調整しない。
 - `ArmorUtils#getArmorSet` が `getItemBySlot` 以外の経路に変わったら追従が要る
   （`/notcosmeticarmor status` の `is4` が false になったことで気づける）。
+
+## 18. コスメ装備が実装備の「能力」を隠していた（1.4.0）
+
+### 現象
+
+ユーザー報告（m04911、原文）: "う〜ん色々検証して築いたのですが、コスメにものがあると本体側が無視されていませんか？例えばコスメがダイヤ装備だったとしてもUIは出ますが飛行などの能力が出ません、kill無効化などもです。"
+
+`/tmp/nca-test`（実インスタンスのコピー、41 mods 中 fantasy_ending と EndingLib を有効化）で
+再現した。実装備に夢幻終焉 4 点を `/item replace` で入れ、コスメ枠にダイヤ 4 点を入れた状態:
+
+| 見たもの | 1.3.0 | 1.4.0 |
+|---|---|---|
+| `fantasyEnding:` 行 | `set=DIAMOND is4=false shield[level=0 dr=128.0]` | `set=FANTASY_ENDING_MATERIAL is4=true shield[level=4936 dr=128.0]` |
+| `/kill @p` | 死亡（"TestPlayerは殺された"） | 死亡しない（HP 7.54 → 16.2、XP 30 → 28） |
+| `/damage @p 50 minecraft:mob_attack` | 通る | キャンセル（"指定のダメージタイプは対象には効果がありません"） |
+| `/damage @p 200 minecraft:mob_attack` | — | 通る（HP 20.0 → 7.54 = 128 を引いて 0.75 倍） |
+| `/effect give @p minecraft:poison 10 2` | 付与される | 拒否（"対象に効果を与えることができません"） |
+| シールド HUD | バーが出ない | バーが出る（"夢幻終焉の岸 1824s"） |
+| ダブルタップ飛行 | 不可 | 可（Y 173.38 → 188.75 / 2 秒） |
+
+### 原因 1: セット判定が実装備を見ない
+
+`/tmp/el/src/com/mega/endinglib/util/mc/entity/armor/ArmorUtils.java:163-183` の
+`getArmorSet(LivingEntity)` は 4 枠を `living.m_6844_(slot)` で読むだけ。コスメがあるスロットでは
+我々の L3 がコスメを返すので、実装備の material が数えられない。
+→ 4 点セットが成立せず、`FantasyEndingArmorItem#is4Armor` が false になり、
+`ArmorEvents` の全ゲート（attack / hurt / damage / death / effect）が閉じる。
+
+修正: `compat/endinglib/ArmorSetUnion.java` + `ArmorUtilsMixin` で `getArmorSet` の HEAD を
+上書きし、「実装備・コスメのどちらかが一致するスロットが 4 つ以上」なら成立とみなす。
+複数候補があるときは `OptionArmorMaterial`（EndingLib のセット効果付き素材）を優先する。
+対象クラスが無い環境では `EndingLibMixinPlugin` が config を読み込まない。
+
+### 原因 2: コスメの item tick がサーバー限定だった
+
+バニラは `Player#tick` から `Inventory#tick` を**両側で**呼ぶので、実装備の `onArmorTick` は
+クライアントでも走る。一方 `CosmeticTick.onTickEnd(ServerPlayer)` はサーバー専用だった。
+`/tmp/fesrc/com/mega/uom/common/items/armor/FantasyEndingArmorItem.java` の `onArmorTick` は
+CHEST 分岐で `player.m_150110_().f_35936_ = true`（mayfly）を side 判定なしに立てるため、
+コスメ枠だとサーバーだけ `mayfly=true`、クライアントは false のまま → ダブルタップが成立しない
+（HUD はサーバー同期のシールド値で出るので「UI は出るのに飛べない」になる）。
+
+修正: `CosmeticTick.onTickEndClient(Player)` を追加し、`PlayerMixin` の `tick` TAIL で
+`ServerPlayer` 以外にも `CosmeticItemTicker.tick` を回す（速度変更の `hurtMarked` はサーバーのみ）。
+
+### 原因 3: tick 窓の中で実装備が退避される
+
+原因 1 を直しても、ケース A だけ `shield[level=0]` のままだった。`FeRunicShieldCapability#tick` は
+`LivingTickEvent`（= `Player#tick` の内側 = **tick 窓が開いている最中**）で
+`if (!is4Armor(living)) { level = 0; }` を実行する。窓の中は `TickWindow#open` が
+`Inventory#armor` をコスメで置き換え、実装備を `CosmeticState#windowReal` に退避しているため、
+union の 2 層（`getItemBySlot` と `Inventory#armor`）が両方コスメになり、実装備セットが消える。
+`when4SetTick` は 10 tick ごとに 4936 を書き戻すが、奇数 tick のたびに 0 へ戻される。
+
+修正: `ArmorSetUnion` に第 3 層（`state.windowHeld` のときの `state.windowReal`）を追加。
+ケース B（コスメだけがセット）は窓の中もコスメなので影響を受けず、ケース A だけが壊れていた
+（= 症状が「コスメに何か入れると実装備が消える」に見えた理由）。
+
+### 検証ハーネス
+
+`/notcosmeticarmor cosmetic <feet|legs|chest|head> <item id|none>` を追加した。
+`CarBridge.set` 経由で CAR のインベントリに書くので同期・保存も通常と同じ。これまでは
+`.cosarmor` を直接書き換えるためにワールドを出る必要があった（1 組み合わせ = 2 分）。
+このコマンドで 1 起動のうちに A/B を切り替えられる。
+
+### 罠
+
+- ワールド内で死ぬと **CAR のコスメ装備が落ちて `.cosarmor` が空になる**（39 B）。テスト前に
+  `mkcos.py` のバックアップを取ること。
+- 同じ DISPLAY で 2 クライアントを起動するとワールドがロックされ、片方を kill すると
+  `xvfb-run` が Xvfb ごと落としてもう片方も道連れになる。起動前に
+  `ps -eo pid,args | grep -E 'Xvfb|BootstrapLauncher'` で残存確認。
+- 空中でのダブルタップは「1 回目の押下から 7 tick 以内・空中」が条件。テレポート直後は
+  チャット欄にフォーカスが残っていることがあり、1 回目が吸われると成立しない
+  （1 回の失敗を「飛べない」と誤読しかけた）。
+
+### 残る制約
+
+- 4 セット判定は実装備とコスメの**合算**になる。実装備 2 点 + コスメ 2 点でもセット成立
+  （属性ミラーが両方を足すのと同じ方針）。実装備だけで組んだ場合の挙動は変わらない。
+- `ArmorUtils#getArmorSet` のシグネチャが変わったら追従が要る（`/notcosmeticarmor status` の
+  `is4` が false になったことで気づける）。
+
