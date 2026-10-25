@@ -70,6 +70,17 @@ repositories {
     }
 }
 
+// Optional test mods (Tinkers' Construct and Mantle) used only for manual in-game
+// verification with modded armor. They are not part of the mod's own dependencies;
+// `exportTestMods` writes the CurseForge release jars to build/test-mods for a
+// production client, and `modRuntimeOnly` loads the deobfuscated versions in runClient.
+configurations {
+    testMods {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
@@ -78,7 +89,24 @@ dependencies {
     // loaded in runClient; a raw SRG jar in run/mods crashes the dev runtime.
     implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
 
+    // Optional, test-only: modded armor to check item tick / durability mirrors.
+    // Off by default so a normal build does not need CurseForge resolution; enable with
+    //   ./gradlew runClient -PtestMods
+    if (project.hasProperty('testMods')) {
+        testMods 'curse.maven:mantle-74924:8809819'
+        testMods 'curse.maven:tinkers-construct-74072:8944121'
+        runtimeOnly fg.deobf('curse.maven:mantle-74924:8809819')
+        runtimeOnly fg.deobf('curse.maven:tinkers-construct-74072:8944121')
+    }
+
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+tasks.register('exportTestMods', Copy) {
+    group = 'verification'
+    description = 'Copies the optional test mods (release jars) into build/test-mods.'
+    from configurations.testMods
+    into layout.buildDirectory.dir('test-mods')
 }
 
 mixin {

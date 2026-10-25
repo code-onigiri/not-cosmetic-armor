@@ -303,3 +303,44 @@ tick 窓（L2）が開いている間は `Inventory#armor` にコスメのコピ
 - Unbreaking の抽選はコスメ側でも独立に走るので、実装備とコスメで減少量がずれることがある
   （バニラの規則どおり）。
 
+## 12. 追記（エンチャントは `getArmorSlots` も上書きしないと効かない）
+
+plan.md の M8 は `Player#getItemBySlot` の上書きだけでエンチャントが効く前提だったが、
+実機では **Protection IV を付けても軽減が乗らなかった**（防御力 14 の装甲分だけで、
+`mob_attack 10` → 6.0。実枠に同じヘルメットを着けると 4.368 まで下がる）。
+
+### 原因
+
+バニラのダメージ軽減は装備を `getArmorSlots()`（srg `m_6168_`）のリストから読む:
+
+- `LivingEntity.java:1592`: `int epf = EnchantmentHelper.getDamageProtection(this.getArmorSlots(), source);`
+- `Player.java:1804-1806`: `getArmorSlots()` は `inventory.armor`（NonNullList）をそのまま返す。
+
+つまり `getItemBySlot` を通らない。上書きの対象を `getArmorSlots` にも広げ、
+実装備リストをコピーしてコスメで差し替えたリストを返すようにした
+（L3 の実装は `PlayerMixin#notcosmeticarmor$getArmorSlots`）。
+
+`getArmorSlots` の利用箇所は 3 つだけ（軽減計算・防具数カウント・`PiglinAi` の金防具判定）で、
+いずれも読み取り専用なので副作用は限定的。
+
+### 意味論（置き換えであり加算ではない）
+
+コスメがあるスロットでは**コスメのエンチャントだけ**がリストに入る。実装備のエンチャントは
+そのスロットでは軽減計算に寄与しない。属性ミラー（L1）は実装備の上に加算するので非対称だが、
+「そのスロットに着ているのはどれか」というクエリの意味では一貫している。
+
+### 実測
+
+| 条件 | ダメージ | 結果 |
+|---|---|---|
+| 上書き前: Protection IV コスメ金ヘルメット | `mob_attack` 10 | 6.0（EPF なし） |
+| 上書き後: 同条件 | `mob_attack` 10 | 5.04（EPF 4 → ×0.84） |
+| Protection IV + Feather Falling IV コスメ | `fall` 20 | 7.2（EPF 16 → ×0.36） |
+| 実枠にも FF IV 金ブーツを追加 | `fall` 20 | 7.2（置き換えのため EPF は 16 のまま） |
+
+### 残る制約
+
+- ピグリンは `PiglinAi#isWearingSafeArmor` が `getArmorSlots` を見るため、コスメの金防具でも
+  敵対しなくなる（バニラと同じ経路に乗る。意図的に残している）。
+- 同じスロットの実装備のエンチャントは、コスメを外すまで軽減に効かない。
+

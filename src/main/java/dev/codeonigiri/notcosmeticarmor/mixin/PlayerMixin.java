@@ -2,6 +2,7 @@ package dev.codeonigiri.notcosmeticarmor.mixin;
 
 import dev.codeonigiri.notcosmeticarmor.config.CnaConfig;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticDurability;
+import dev.codeonigiri.notcosmeticarmor.core.CosmeticSlots;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticState;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticStacks;
 import dev.codeonigiri.notcosmeticarmor.core.CosmeticTick;
@@ -11,6 +12,8 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import java.util.ArrayList;
+import java.util.List;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -46,6 +49,46 @@ public abstract class PlayerMixin {
         ItemStack cosmetic = CosmeticStacks.get(player, slot.getIndex());
         if (!cosmetic.isEmpty()) {
             cir.setReturnValue(cosmetic);
+        }
+    }
+
+    /**
+     * Damage reducing enchantments (Protection, Feather Falling, ...) are computed from
+     * {@code getArmorSlots()}, and {@code Player} returns the raw {@code Inventory#armor} list there -
+     * it never asks {@code getItemBySlot}. Reporting the cosmetic stacks from this method as well is
+     * what makes those enchantments apply to cosmetic armor, exactly like they do on real armor.
+     */
+    @Inject(method = "getArmorSlots", at = @At("RETURN"), cancellable = true)
+    private void notcosmeticarmor$getArmorSlots(CallbackInfoReturnable<Iterable<ItemStack>> cir) {
+        Player self = (Player) (Object) this;
+        if (self.level().isClientSide() || !(self instanceof ServerPlayer player)) {
+            return;
+        }
+        if (!CnaConfig.enabled() || !CnaConfig.overrideQueries()) {
+            return;
+        }
+        CosmeticState state = CosmeticState.peek(player);
+        if (state == null || state.bookkeeping) {
+            return;
+        }
+        List<ItemStack> merged = null;
+        for (int i = 0; i < CosmeticSlots.COUNT; i++) {
+            ItemStack cosmetic = CosmeticStacks.get(player, i);
+            if (cosmetic.isEmpty()) {
+                continue;
+            }
+            if (merged == null) {
+                merged = new ArrayList<>(CosmeticSlots.COUNT);
+                for (ItemStack real : cir.getReturnValue()) {
+                    merged.add(real);
+                }
+            }
+            if (i < merged.size()) {
+                merged.set(i, cosmetic);
+            }
+        }
+        if (merged != null) {
+            cir.setReturnValue(merged);
         }
     }
 

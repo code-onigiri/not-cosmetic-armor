@@ -21,7 +21,8 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 ## 何が機能するか
 
 - **属性**: コスメ防具の attribute modifier（防御力、防具強度、ノックバック耐性、移動速度など）を実装備の上に加算。UUID はプレイヤー・スロットごとに再生成するので、実装備の modifier と衝突しません。
-- **エンチャント**: `getItemBySlot` を上書きしてコスメ装備を「着ている防具」として返すため、バニラのダメージ計算（Protection など）や他 MOD の参照にもコスメ防具が見えます。
+- **エンチャント**: `Player#getItemBySlot` と `Player#getArmorSlots` の両方を上書きしてコスメ装備を「着ている防具」として返すため、バニラのダメージ軽減（Protection / Feather Falling / Thorns）や他 MOD の参照にもコスメ防具が見えます。バニラの軽減計算は `getItemBySlot` ではなく `getArmorSlots` のリストを回すため、片方だけでは効きません。
+  同じスロットにコスメを着けている間、そのスロットの**実装備のエンチャントは軽減計算に使われません**（コスメが置き換わる。属性のように加算はしません）。
 - **tick 内の参照（インタリーブ）**: 奇数ゲーム tick の `Player#tick` の間だけ、コスメ装備を実装備枠に**コピー**して入れ、tick の終わりに元へ戻します。鞘翅の滑翔判定、カメの甲羅の水中呼吸、MOD の「この装備を着ているか」判定など、tick の内側で `getItemBySlot` を読む処理にもコスメ装備が見えます。クライアントには何も送られず、実装備は一切失われません。
 - **item tick**: コスメ枠のアイテムにも `inventoryTick` / Forge の `onArmorTick` が走ります。エネルギーやチャージを持つ MOD 防具（TiC など）の動作に必要です。
 - **耐久**: 実装備が耐久ダメージを受けたとき、同じスロットのコスメ装備にも**同じ量**のダメージが入ります（4 分の 1 丸め・最低 1 のバニラ規則、Unbreaking、壊れたら消える挙動まで同じ）。`/notcosmeticarmor status` の `dmg=` で両方の耐久値を確認できます。
@@ -30,6 +31,8 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 
 - **描画**: 見た目の差し替えは従来どおり CAR が担当します。本 MOD は描画コードに触りません（[描画（L4）](#描画l4)）。
 - **実装備の tick**: コスメの下に隠れている実装備も、これまで通り tick されます（バニラの挙動を変えない方針）。
+- **同じスロットの実装備エンチャントの重ね掛け**: コスメが無いスロットの実装備、コスメがあるスロットのコスメ装備のエンチャントは効きますが、両方を同時に足し合わせることはしません（上記の置き換え）。
+- **ピグリン**: `PiglinAi` が金防具を `getArmorSlots` で判定するため、コスメの金防具でもピグリンが敵対しなくなります（バニラの判定と同じ経路に乗るため、意図的に残しています）。
 
 ## 設定
 
@@ -39,7 +42,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 |---|---|---|
 | `general.enabled` | true | MOD 全体の有効/無効 |
 | `behavior.mirrorAttributes` | true | コスメ防具の属性を実装備に加算する |
-| `behavior.overrideQueries` | true | `getItemBySlot` でコスメ防具を返す（エンチャント有効化） |
+| `behavior.overrideQueries` | true | `getItemBySlot` / `getArmorSlots` でコスメ防具を返す（エンチャント有効化） |
 | `behavior.interleave` | true | 奇数 tick の間だけコスメ装備を実装備枠にコピーする（tick 内参照の有効化） |
 | `behavior.tickCosmeticItems` | true | コスメ枠のアイテムを tick する |
 | `behavior.cosmeticDurability` | true | 実装備が受けた耐久ダメージをコスメ装備にも同じ量だけ入れる |
@@ -101,7 +104,9 @@ implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
 1. **属性ミラー** — 毎 tick、コスメ枠の `getAttributeModifiers` を読み、UUID を再生成した
    transient modifier として `AttributeMap` に追加/削除する。クエリ上書きとは独立に動く。
 2. **クエリ上書き** — `Player#getItemBySlot` の RETURN で、防具スロットかつサーバー側のときだけ
-   コスメスタックを返す。実体（`Inventory#armor`）は一切書き換えない。
+   コスメスタックを返す。`Player#getArmorSlots`（`m_6168_`。バニラのダメージ軽減が回すリスト）も
+   同じ条件で、実装備リストをコピーしてコスメに差し替えたリストを返す。実体（`Inventory#armor`）は
+   一切書き換えない。
 3. **差分ガード** — バニラは `LivingEntity#tick` の中で毎 tick 装備の差分を取り、
    変化があれば属性を付け替えて `ClientboundSetEquipmentPacket` を送る。その差分処理の間だけ
    上書きを止め、バニラには常に実装備を見せる。これがないと毎 tick パケットが飛び、属性が壊れる。
@@ -168,6 +173,26 @@ armor は 8 + 5 = 13、窓の内外で `getItemBySlot` が入れ替わり、防�
 `/damage @p 5`（既定の `minecraft:generic`）では耐久は減りません。これはバニラの仕様で、
 `bypasses_armor` タグの付いたダメージは防具の耐久を削らないためです。耐久のテストには
 `minecraft:mob_attack` か炎を使ってください。
+
+### エンチャントの検証（実機）
+
+体力 200・難易度 hard・自然回復オフ（`/gamerule naturalRegeneration false`）で、
+`/damage` と `/data get entity @p Health` の差分から実測しました。実装備はダイヤ胸当て
+（防御力 8・強度 2）、コスメは TiC 銅プレート胸当て（防御力 3）・Protection IV 金ヘルメット・
+Feather Falling IV 金ブーツ（合計防御力 14）。
+
+| 条件 | ダメージ | 実測 | 計算 |
+|---|---|---|---|
+| コスメ無し（実装備のみ、防御力 8） | `mob_attack` 10 | 8.4 | 10 × (1 − 8/25) ... 強度込みの式で 8.4 |
+| Protection IV コスメ、`getArmorSlots` 上書き**前**（防御力 14） | `mob_attack` 10 | 6.0 | 装甲のみ 10 × (1 − 10/25) = 6.0（EPF が乗らない） |
+| 同上、上書き**後** | `mob_attack` 10 | 5.04 | 6.0 × (1 − 4/25) = 5.04 |
+| Protection IV + Feather Falling IV コスメ | `fall` 20 | 7.2 | EPF 16 → 20 × (1 − 16/25) = 7.2 |
+| さらに実枠にも FF IV 金ブーツ（EPF は置換で 16 のまま） | `fall` 20 | 7.2 | 同上 |
+
+上書き前は Protection IV が完全に無効、上書き後は予測式と一致しています。
+
+TiC 防具（`tconstruct:plate_chestplate`、`ArmorItem` 系）も属性ミラー・耐久ミラーが
+そのまま動き、モブ攻撃 3 回で実装備 22→28/528、コスメ 0→6/208 と同量ずつ減りました。
 
 ## ライセンス
 
