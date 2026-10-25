@@ -15,7 +15,8 @@ Protection / Thorns / Frost Walker などのエンチャントが有効になり
 | Java | 17 |
 | 必須 | [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked) 4.x（1.20.1-v1a で検証） |
 
-CAR が無い場合、この MOD は何もせず待機します（クラッシュしません）。
+CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い場合は Forge が
+「Missing or unsupported mandatory dependencies」として起動を止めます。
 
 ## 何が機能するか
 
@@ -78,11 +79,21 @@ Nix を使わない場合は JDK 17 を用意して `./gradlew build` を実行�
 ./gradlew runClient
 ```
 
-`run/mods/` には CAR の jar を置かないでください。CAR の配布 jar は SRG 名でコンパイルされた
-本番用で、開発ランタイム（official 名）では `Component.m_237113_` が見つからず、
-起動時に `NoSuchMethodError` で落ちます。CAR と一緒に動かす確認は、通常の Forge クライアント
-（`mods/` に jar を置く本番環境）で行ってください。CAR が無い開発環境でも、この MOD は
-「CAR が見つからない」とログに出して待機するだけで、起動はできます。
+CAR は CurseMaven 経由の依存として `build.gradle` に入っているので、`runClient` でも
+そのまま読み込まれます（`fg.deobf` が SRG 名の配布 jar を開発用の名前に変換します）。
+`run/mods/` に CAR の配布 jar を直接置かないでください。SRG 名のままでは開発ランタイムで
+`Component.m_237113_` が見つからず、起動時に `NoSuchMethodError` で落ちます。
+
+```groovy
+implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
+```
+
+バージョンを変えるときは CurseForge のファイル ID（末尾の数字）を差し替えてください。
+
+`compileJava` は Gradle のビルドキャッシュを使わない設定にしてあります。mixin の refmap は
+アノテーションプロセッサが `build/tmp` に書き出すため、キャッシュから復元されると jar に
+入らないことがあるからです。refmap が無いと本番で `No refMap loaded` になり全 mixin が
+失敗します。`jar` タスクは refmap の同梱を検証し、無ければビルドを失敗させます。
 
 ## 仕組み
 

@@ -30,7 +30,7 @@ Cosmetic Armor Reworked のコスメ装備を、見た目だけでなく実際�
 
 [[dependencies.${mod_id}]]
     modId="cosmeticarmorreworked"
-    mandatory=false
+    mandatory=true
     versionRange="[1.20.1,)"
     ordering="AFTER"
     side="BOTH"

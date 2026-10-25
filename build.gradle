@@ -63,10 +63,20 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 repositories {
     mavenCentral()
     maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // Cosmetic Armor Reworked 1.20.1-v1a (CurseForge file 4600191).
+    // fg.deobf remaps the SRG release jar into the dev mappings so it can also be
+    // loaded in runClient; a raw SRG jar in run/mods crashes the dev runtime.
+    implementation fg.deobf('curse.maven:cosmetic-armor-reworked-237307:4600191')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
@@ -78,6 +88,14 @@ mixin {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// The mixin annotation processor writes the refmap into build/tmp, which Gradle's
+// build cache does not restore. A cache-hit compile therefore yields a jar without
+// a refmap, and the mixins fail in production with "No refMap loaded". Keep
+// compileJava out of the cache so the processor always runs.
+tasks.named('compileJava', JavaCompile).configure {
+    outputs.cacheIf { false }
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -93,6 +111,20 @@ tasks.named('processResources', ProcessResources).configure {
     inputs.properties replaceProperties
     filesMatching(['META-INF/mods.toml']) {
         expand replaceProperties
+    }
+}
+
+// The mixin annotation processor writes the refmap into build/tmp and MixinGradle
+// copies it into the jar. Without an explicit dependency the copy can run *after*
+// the jar on a clean build, shipping a jar whose mixin targets are unmapped.
+tasks.named('jar', Jar).configure {
+    dependsOn 'addMixinsToJar'
+    doLast {
+        def hasRefmap = !zipTree(archiveFile.get().asFile)
+                .matching { include '**/*.refmap.json' }.isEmpty()
+        if (!hasRefmap) {
+            throw new GradleException("refmap is missing from ${archiveFile.get().asFile.name}")
+        }
     }
 }
 
