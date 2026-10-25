@@ -55,8 +55,9 @@ public abstract class PlayerMixin {
     /**
      * Damage reducing enchantments (Protection, Feather Falling, ...) are computed from
      * {@code getArmorSlots()}, and {@code Player} returns the raw {@code Inventory#armor} list there -
-     * it never asks {@code getItemBySlot}. Reporting the cosmetic stacks from this method as well is
-     * what makes those enchantments apply to cosmetic armor, exactly like they do on real armor.
+     * it never asks {@code getItemBySlot}. The cosmetic stacks are <em>appended</em> to that list
+     * (not substituted) so that both sets of enchantments add up, the same way the attribute mirror
+     * adds the cosmetic armor's attributes on top of the real ones.
      */
     @Inject(method = "getArmorSlots", at = @At("RETURN"), cancellable = true)
     private void notcosmeticarmor$getArmorSlots(CallbackInfoReturnable<Iterable<ItemStack>> cir) {
@@ -78,14 +79,12 @@ public abstract class PlayerMixin {
                 continue;
             }
             if (merged == null) {
-                merged = new ArrayList<>(CosmeticSlots.COUNT);
+                merged = new ArrayList<>(CosmeticSlots.COUNT * 2);
                 for (ItemStack real : cir.getReturnValue()) {
                     merged.add(real);
                 }
             }
-            if (i < merged.size()) {
-                merged.set(i, cosmetic);
-            }
+            merged.add(cosmetic);
         }
         if (merged != null) {
             cir.setReturnValue(merged);
