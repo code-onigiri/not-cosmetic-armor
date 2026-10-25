@@ -1,0 +1,16 @@
+build/
+run/
+logs/
+# gradle writes native libs into this literal path when the run task is configured oddly
+*natives_directory*
+result
+result-*
+.direnv/
+
+run-data/
+.gradle/
+*.iml
+.idea/
+.vscode/
+libs/*.jar
+!libs/.gitkeep

@@ -1,0 +1,39 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="MIT"
+issueTrackerURL="https://github.com/code-onigiri/not-cosmetic-armor/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="Not Cosmetic Armor"
+authors="code-onigiri"
+description='''
+Cosmetic Armor Reworked のコスメ装備を、見た目だけでなく実際に機能させます。
+コスメ枠の防具の属性（防御力・強度・ノックバック耐性など）とエンチャントを、
+実際の装備に上乗せします。実装備はそのまま本物として扱われます。
+'''
+
+[[dependencies.${mod_id}]]
+    modId="forge"
+    mandatory=true
+    versionRange="${forge_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="cosmeticarmorreworked"
+    mandatory=false
+    versionRange="[1.20.1,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[mixins]]
+config="${mod_id}.mixins.json"
