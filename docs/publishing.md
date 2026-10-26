@@ -6,7 +6,7 @@ Modrinth / CurseForge / GitHub に出すための準備と、そのまま貼れ�
 
 | 項目 | 状態 |
 |---|---|
-| GitHub リポジトリ `code-onigiri/not-cosmetic-armor` | **未作成**。`mods.toml` の `issueTrackerURL` と `displayURL` はこの URL を指している。別名にするなら両方直す |
+| GitHub リポジトリ `code-onigiri/not-cosmetic-armor` | **公開済み**（<https://github.com/code-onigiri/not-cosmetic-armor>）。`mods.toml` の `issueTrackerURL` / `displayURL` もこの URL。`.github/workflows/build.yml` で push と PR ごとにビルドし、jar を artifact に上げる |
 | Modrinth プロジェクト | 未作成 |
 | CurseForge プロジェクト | 未作成 |
 | アイコン | `src/main/resources/logo.png`（512x512、jar に同梱済み） |
@@ -33,11 +33,21 @@ unzip -l build/libs/notcosmeticarmor-1.20.1-1.0.0.jar | grep -E 'logo.png|refmap
 はみ出した部分を切り落とす。GUI スケール 2 で 1 行に収まるのは半角 44 文字（CJK は約 26 文字）
 までなので、1 行 33 文字程度で改行しておく（現在の英文は最長 33 文字）。
 
-タグを打ってからアップロードする:
+タグを打って GitHub Releases に上げる:
 
 ```sh
-git tag -a v1.0.0 -m "Not Cosmetic Armor 1.0.0"
+V=1.6.1   # gradle.properties の mod_version と同じにする
+git tag -a "v$V" -m "Not Cosmetic Armor $V"
+git push origin main --follow-tags
+
+gh release create "v$V" \
+  "build/libs/notcosmeticarmor-1.20.1-$V.jar" \
+  --title "Not Cosmetic Armor $V" \
+  --notes-file "release-notes-$V.md"    # CHANGELOG の該当節を貼る
 ```
+
+タグを push すると CI（`.github/workflows/build.yml`）が同じタグでビルドも走る。
+リリース本文は CHANGELOG の節をそのまま貼るのが基本（利用者向けの要約 + 変更点）。
 
 ## 3. バージョンの付け方
 
@@ -178,7 +188,8 @@ Mod loader は `Forge`、Relations で **Cosmetic Armor Reworked を Required de
 1. `gradle.properties` の `mod_version` を上げる。
 2. `CHANGELOG.md` に追記する。
 3. `README.md` の検証ログ・互換性表を更新する（新しい MOD で試したとき）。
-4. `./gradlew clean build` → jar をアップロード → `git tag`。
+4. `./gradlew clean build` → コミット & push → `git tag v<version>` → `gh release create` で jar を添付（上のコマンド例）。
+5. Modrinth / CurseForge には同じ jar を手動でアップロードする。
 
 Modrinth への自動アップロードをしたくなったら、`minotaur` Gradle プラグイン
 （`com.modrinth.minotaur`）を入れて `MODRINTH_TOKEN` を環境変数で渡す形にできる。

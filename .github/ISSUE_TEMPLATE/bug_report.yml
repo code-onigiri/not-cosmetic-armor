@@ -1,0 +1,49 @@
+name: 不具合報告 / Bug report
+description: コスメ枠の装備が機能しない、クラッシュする、など
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        不具合の切り分けには、こちらの 2 つがほぼ必須です。
+        - `/notcosmeticarmor status` の出力（権限 2 以上）
+        - `latest.log` の該当箇所（クラッシュなら `crash-reports/` のファイル全体）
+
+        コスメ機能は「実装備 / コスメ / MOD 側がどの経路で装備を読むか」で結果が変わります。
+        「どのスロットに何を入れたか」を具体的に書いてもらえると助かります。
+  - type: input
+    id: versions
+    attributes:
+      label: バージョン
+      description: Minecraft / Forge / 本 MOD / Cosmetic Armor Reworked
+      placeholder: 1.20.1 / 47.4.28 / 1.6.1 / 1.20.1-v1a
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 何をしたとき、何が起きたか
+      description: 実装備とコスメ枠に何を入れたか、期待した動作と実際の動作
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: /notcosmeticarmor status の出力
+      render: text
+  - type: textarea
+    id: mods
+    attributes:
+      label: 関係しそうな MOD
+      description: 問題の装備を追加する MOD（あればバージョンも）
+  - type: textarea
+    id: log
+    attributes:
+      label: ログ
+      description: latest.log の該当箇所、または crash-reports のファイル
+      render: text
+  - type: markdown
+    attributes:
+      value: |
+        本 MOD が原因ではない起動クラッシュもあります（README の「本 MOD が原因ではない起動クラッシュ」を参照）。
+        mixin の `already redirected by` が出ている場合は、他の MOD 同士の衝突です。

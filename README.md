@@ -6,6 +6,8 @@
 [![Forge](https://img.shields.io/badge/Forge-47.x-f16436)](https://files.minecraftforge.net/)
 [![Java](https://img.shields.io/badge/Java-17-007396)](https://adoptium.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![build](https://github.com/code-onigiri/not-cosmetic-armor/actions/workflows/build.yml/badge.svg)](https://github.com/code-onigiri/not-cosmetic-armor/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/code-onigiri/not-cosmetic-armor)](https://github.com/code-onigiri/not-cosmetic-armor/releases)
 
 Cosmetic Armor Reworked のコスメ装備を、**見た目だけ**から**実際に機能する装備**に変える 1.20.1 Forge 用アドオンです。
 
@@ -33,7 +35,7 @@ CAR は必須依存です（`mods.toml` で `mandatory=true`）。CAR が無い�
 ## 導入
 
 1. [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)（1.20.1 版）を `mods/` に入れる。
-2. 本 MOD の jar（`notcosmeticarmor-1.20.1-<version>.jar`）を `mods/` に入れる。
+2. 本 MOD の jar（`notcosmeticarmor-1.20.1-<version>.jar`）を `mods/` に入れる。[Releases](https://github.com/code-onigiri/not-cosmetic-armor/releases) から取得する。
 3. クライアントとサーバーの**両方**に入れる（機能の判定はサーバー側で行い、描画は CAR が担当するため）。
 4. サーバー側は `config/notcosmeticarmor-server.toml` が生成される。既定で有効。
 
