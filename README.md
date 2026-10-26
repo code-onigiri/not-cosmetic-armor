@@ -13,8 +13,9 @@ Cosmetic Armor Reworked のコスメ装備を、**見た目だけ**から**実�
 
 > **English**: Makes the cosmetic slots of [Cosmetic Armor Reworked](https://www.curseforge.com/minecraft/mc-mods/cosmetic-armor-reworked)
 > actually work — armor attributes, enchantments, item ticks, durability mirroring and movement
-> sync (jetpacks fly). Requires CAR on both client and server. See [docs/publishing.md](docs/publishing.md)
-> for the English description.
+> sync (jetpacks fly). Requires CAR on both client and server. Grab the jar from
+> [Releases](https://github.com/code-onigiri/not-cosmetic-armor/releases); the full English
+> description is in [docs/publishing.md](docs/publishing.md).
 
 コスメ枠に防具を入れると、その防具の防御力・防具強度・ノックバック耐性などの属性と、
 Protection / Thorns / Frost Walker などのエンチャントが有効になります。
