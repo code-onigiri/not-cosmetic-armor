@@ -8,7 +8,7 @@ Modrinth / CurseForge / GitHub に出すための準備と、そのまま貼れ�
 |---|---|
 | GitHub リポジトリ `code-onigiri/not-cosmetic-armor` | **公開済み**（<https://github.com/code-onigiri/not-cosmetic-armor>）。`mods.toml` の `issueTrackerURL` / `displayURL` もこの URL。`.github/workflows/build.yml` で push と PR ごとにビルドし、jar を artifact に上げる |
 | Modrinth プロジェクト | 未作成 |
-| CurseForge プロジェクト | 未作成 |
+| CurseForge プロジェクト | 未作成。掲載文・入力欄ごとの値・チェックリストは [curseforge.md](curseforge.md) |
 | アイコン | `src/main/resources/logo.png`（512x512、jar に同梱済み） |
 | スクリーンショット | `docs/img/` の 4 枚（下の表） |
 | ライセンス | MIT（[LICENSE](../LICENSE)） |
@@ -168,9 +168,17 @@ MIT ライセンス。
 
 ## 5. CurseForge 掲載文
 
-Summary は Modrinth と同じでよい。Description は Modrinth の英語版をそのまま使い、
-File 名は `notcosmeticarmor-1.20.1-1.0.0.jar`、Game version は `1.20.1`、
-Mod loader は `Forge`、Relations で **Cosmetic Armor Reworked を Required dependency** に設定する。
+**入力欄ごとの値をまとめた掲載キットは [curseforge.md](curseforge.md)。** プロジェクト名・Summary・
+カテゴリ・Environment・Relations・Description（英語／日本語）・File メタデータ・Changelog・
+スクリーンショットのキャプション・公開前チェックリストを、そのまま貼れる形で置いてある。
+
+要点だけ:
+
+- Summary は Modrinth と同じでよい（英語 256 文字以内）。
+- Description は CurseForge も Markdown が使えるので、[curseforge.md](curseforge.md) §2 の英語本文を貼る。
+- File 名は `notcosmeticarmor-1.20.1-<version>.jar`、Game version `1.20.1`、Mod loader `Forge`、Release type `Release`。
+- Environment は **Client and Server**（両方必須）。
+- Relations で **Cosmetic Armor Reworked を Required dependency** に設定する。
 
 カテゴリ・タグ（両サイト共通）: `Armor` / `Cosmetic` / `Utility` / `Forge`。
 
